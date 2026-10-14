@@ -2,7 +2,7 @@
 
 Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUNGSPLAN.md](docs/UMSETZUNGSPLAN.md).
 
-**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Arbeitspaket 4: Einrichtungen anlegen/bearbeiten/löschen mit Adresssuche, verschiebbarem Marker, automatischer Gebietszuordnung, kombinierbaren Filtern, Trefferliste, Clustering und Detailansicht. Arbeitspaket 5: Lagemodus (Fläche zeichnen, Radius um Punkt, Verwaltungs-/PLZ-Gebiet, Pufferzone, Betroffene getrennt nach Gebiet/Puffer, CSV- und PDF-Lageliste, Ereignisse speichern/öffnen). Arbeitspaket 6: Druck des gefilterten Bestands als PDF (DIN A2 ein Blatt oder DIN A4 gestückelt mit Blattschnittübersicht, Überlappung, Passermarken; nummerierte Punkte, Legende, Maßstab, Nordpfeil, Stand, Quellen, Kontaktverzeichnis; 150 dpi).
+**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Arbeitspaket 4: Einrichtungen anlegen/bearbeiten/löschen mit Adresssuche, verschiebbarem Marker, automatischer Gebietszuordnung, kombinierbaren Filtern, Trefferliste, Clustering und Detailansicht. Arbeitspaket 5: Lagemodus (Fläche zeichnen, Radius um Punkt, Verwaltungs-/PLZ-Gebiet, Pufferzone, Betroffene getrennt nach Gebiet/Puffer, CSV- und PDF-Lageliste, Ereignisse speichern/öffnen). Arbeitspaket 6: Druck des gefilterten Bestands als PDF (DIN A2 ein Blatt oder DIN A4 gestückelt mit Blattschnittübersicht, Überlappung, Passermarken; nummerierte Punkte, Legende, Maßstab, Nordpfeil, Stand, Quellen, Kontaktverzeichnis; 150 dpi). Arbeitspaket 7: Offline-Betrieb über Service Worker (App, letzter Datenstand, zuletzt genutzte Kacheln, NRW-Übersicht vorab; Banner „Offline – Datenstand vom …“, reiner Lesebetrieb).
 
 ## Demo im Browser (GitHub Pages)
 Bei jedem Push baut `.github/workflows/pages.yml` eine **Demo-Version** und veröffentlicht sie auf GitHub Pages.
@@ -71,6 +71,13 @@ Für Betrieb ohne Internet die Kacheln vorab erzeugen und das Verzeichnis kopier
 php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=6
 ```
 Ohne Kacheln und ohne Quelle ist „Topografisch“ in der Oberfläche ausgegraut.
+
+## Offline-Betrieb
+Der Service Worker (`sw.js`, beim Frontend-Build erzeugt) speichert App, letzten Datenstand (Einrichtungen, Stammdaten, Grenzen,
+Ereignisse) und bis zu 4.000 Kartenkacheln im Browser. Nach der Anmeldung lädt er die NRW-Übersicht (Zoomstufen 0–4) vor.
+Ohne Verbindung zeigt die Anwendung „Offline – Datenstand vom …“ und erlaubt nur Lesen. Beim Abmelden werden die
+zwischengespeicherten Daten gelöscht. Voraussetzung: Auslieferung über HTTPS (oder localhost); `sw.js` darf nicht lange gecacht werden
+(siehe `docker/nginx/default.conf`).
 
 ## Wichtige Umgebungsvariablen
 | Variable | Standard | Bedeutung |

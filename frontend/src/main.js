@@ -12,13 +12,16 @@ import { renderFacilityEdit } from './views/facilityEdit.js';
 import { renderSituation } from './views/situation.js';
 import { renderPrintDialog } from './views/printDialog.js';
 import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
+import { registerServiceWorker, warmup, clearOfflineData } from './ui/offline.js';
 import './styles/map.css';
 
 const root = document.getElementById('app');
 let me = null;
 let cleanup = null;
+let warmedUp = false;
 
 applyTheme();
+registerServiceWorker();
 
 if (DEMO) {
   document.title = 'KRITIS-Lagekarte NRW (Demo)';
@@ -86,7 +89,8 @@ async function route() {
       return renderAdmin(root, { me, tab: sub, navigate });
     case 'karte':
     default:
-      cleanup = await renderMapPage(root, { me, navigate, selectId: params.get('sel') ? Number(params.get('sel')) : null, onLogout: async () => { me = null; await refreshSession(); navigate('#/login'); } });
+      cleanup = await renderMapPage(root, { me, navigate, selectId: params.get('sel') ? Number(params.get('sel')) : null, onLogout: async () => { me = null; clearOfflineData(); await refreshSession(); navigate('#/login'); } });
+      if (!warmedUp) { warmedUp = true; api('GET', '/map/config').then((cfg) => warmup(cfg, { demo: DEMO })).catch(() => {}); }
       return cleanup;
   }
 }

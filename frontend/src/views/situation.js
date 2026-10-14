@@ -236,7 +236,7 @@ export async function renderSituation(root, { me, eventId, navigate }) {
   const barName = h('span', { class: 'bar-name' }, st.name);
   const barInfo = h('span', { class: 'bar-info' }, st.createdInfo);
   nameIn.addEventListener('input', () => { st.name = nameIn.value; barName.textContent = st.name; });
-  const saveBtn = h('button', { class: 'btn btn-eventfill save-btn', type: 'button' }, st.id ? 'Ereignis aktualisieren' : 'Ereignis speichern');
+  const saveBtn = h('button', { class: 'btn btn-eventfill save-btn', type: 'button', 'data-write': true }, st.id ? 'Ereignis aktualisieren' : 'Ereignis speichern');
   saveBtn.addEventListener('click', async () => {
     const def = definition();
     if (!def) { toast(notice, 'Bitte zuerst ein Ereignisgebiet festlegen.', 'err'); return; }

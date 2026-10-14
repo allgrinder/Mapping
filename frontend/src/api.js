@@ -1,4 +1,6 @@
 // API-Client: hält das CSRF-Token und setzt es bei allen ändernden Anfragen.
+import { setOffline, setDataAsOf, isOffline } from './ui/offline.js';
+
 let csrfToken = null;
 const listeners = new Set();
 
@@ -25,11 +27,16 @@ export async function api(method, path, body) {
   if (DEMO) {
     const { handle } = await import('./demo/server.js');
     try {
-      return await handle(method, path, body === undefined ? undefined : JSON.parse(JSON.stringify(body)));
+      const data = await handle(method, path, body === undefined ? undefined : JSON.parse(JSON.stringify(body)));
+      if (data?.dataAsOf && path.startsWith('/facilities')) setDataAsOf(data.dataAsOf);
+      return data;
     } catch (err) {
       if (err instanceof ApiError && (err.code === 'unauthenticated' || err.code === 'password_change_required')) listeners.forEach((fn) => fn(err));
       throw err;
     }
+  }
+  if (method !== 'GET' && isOffline()) {
+    throw new ApiError(0, 'offline', 'Offline – Änderungen sind derzeit nicht möglich.');
   }
   const headers = { Accept: 'application/json' };
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
@@ -44,11 +51,14 @@ export async function api(method, path, body) {
       cache: 'no-store',
     });
   } catch {
+    if (method === 'GET') setOffline(true);
     throw new ApiError(0, 'network', 'Der Server ist nicht erreichbar.');
   }
+  if (method === 'GET') setOffline(res.headers.get('X-From-Cache') === '1' || navigator.onLine === false);
   let data = null;
   try { data = await res.json(); } catch { data = null; }
   if (data && typeof data.csrfToken === 'string') csrfToken = data.csrfToken;
+  if (data?.dataAsOf && path.startsWith('/facilities')) setDataAsOf(data.dataAsOf);
   if (!res.ok) {
     const e = data?.error || {};
     const err = new ApiError(res.status, e.code || 'http_' + res.status, e.message || 'Unbekannter Fehler.', e.fields || {});

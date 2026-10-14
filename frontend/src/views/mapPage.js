@@ -90,7 +90,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
     h('div', { class: 'sb-head' },
       h('div', { class: 'sb-logo' }, svg(UI.pin, { size: 20 })),
       h('div', { style: { flex: '1', 'min-width': '0' } }, h('div', { class: 'sb-title' }, 'KRITIS-Lagekarte'), h('div', { class: 'cap' }, 'Nordrhein-Westfalen')),
-      isAdmin ? h('button', { class: 'btn btn-primary sb-add', type: 'button', 'aria-label': 'Einrichtung anlegen', title: 'Einrichtung anlegen', onClick: () => navigate('#/einrichtung/neu') }, svg(UI.plus, { stroke: 2.4 })) : null),
+      isAdmin ? h('button', { class: 'btn btn-primary sb-add', type: 'button', 'data-write': true, 'aria-label': 'Einrichtung anlegen', title: 'Einrichtung anlegen', onClick: () => navigate('#/einrichtung/neu') }, svg(UI.plus, { stroke: 2.4 })) : null),
     h('div', { class: 'sb-filters' },
       h('div', { class: 'search' }, h('label', { class: 'sr-only', for: 'q' }, 'Suche'), svg(UI.search, { size: 16, stroke: 2.2 }), search),
       h('div', {}, h('div', { class: 'sec', style: { 'margin-bottom': '8px' } }, 'Kategorie'), h('div', { class: 'chips' }, chips)),
@@ -117,7 +117,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
         ? 'Legen Sie die erste Einrichtung an. Sie erscheint sofort auf der Karte und in der Trefferliste – und ist im Lagemodus auswertbar.'
         : 'Sobald die Administration Einrichtungen anlegt, erscheinen sie hier auf der Karte.')),
     isAdmin ? h('div', { style: { display: 'flex', 'flex-direction': 'column', 'align-items': 'center', gap: '8px', width: '100%' } },
-      h('button', { class: 'btn btn-primary btn-hero', type: 'button', onClick: () => navigate('#/einrichtung/neu') }, svg(UI.plus, { stroke: 2.4 }), 'Erste Einrichtung anlegen'),
+      h('button', { class: 'btn btn-primary btn-hero', type: 'button', 'data-write': true, onClick: () => navigate('#/einrichtung/neu') }, svg(UI.plus, { stroke: 2.4 }), 'Erste Einrichtung anlegen'),
       DEMO ? h('button', { class: 'btn btn-secondary', type: 'button', onClick: loadSamples }, 'Beispieldaten laden (Demo)') : null,
       h('a', { class: 'btn btn-plain', href: '#/admin/kategorien', style: { 'font-weight': '500', 'font-size': '13px' } }, 'Kategorien und Szenarien vorher anpassen')) : null,
     cfg.boundaries.length === 0 ? h('div', { class: 'cap' }, 'Hinweis: Es sind noch keine Verwaltungsgrenzen importiert (siehe README, „Grenzdaten importieren“).') : null));
@@ -292,7 +292,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
         it.note ? h('section', {}, h('div', { class: 'sec' }, 'Bemerkung'), h('div', { class: 'note' }, it.note)) : null,
         h('section', {}, h('div', { class: 'sec-row' }, h('div', { class: 'sec' }, 'Lage'), h('div', { class: 'cap' }, 'automatisch ermittelt')), kv),
         h('div', { class: 'cap' }, `Zuletzt geändert: ${it.updatedAt ? new Date(it.updatedAt.replace(' ', 'T') + 'Z').toLocaleString('de-DE') : '–'}${it.updatedBy ? ' · ' + it.updatedBy : ''}`)),
-      isAdmin ? h('div', { class: 'sheet-foot' },
+      isAdmin ? h('div', { class: 'sheet-foot', 'data-write': true },
         h('button', { class: 'btn btn-secondary', type: 'button', style: { color: 'var(--danger)' }, onClick: () => removeFacility(it) }, 'Löschen'),
         h('span', { style: { flex: '1' } }),
         h('button', { class: 'btn btn-primary', type: 'button', onClick: () => navigate(`#/einrichtung/${it.id}`) }, 'Bearbeiten')) : null);

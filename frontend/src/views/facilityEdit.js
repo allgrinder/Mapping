@@ -159,7 +159,7 @@ export async function renderFacilityEdit(root, { id, navigate }) {
   const mail = input('e-m', 'E-Mail', d.contact.email, { type: 'email', max: 190, err: 'contactEmail', onInput: (v) => { d.contact.email = v; } });
   const note = input('e-b', 'Bemerkung', d.note, { tag: 'textarea', rows: 3, max: 4000, err: 'note', onInput: (v) => { d.note = v; } });
 
-  const save = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Speichern');
+  const save = h('button', { class: 'btn btn-primary', type: 'submit', 'data-write': true }, 'Speichern');
   const form = h('form', { class: 'edit-form', novalidate: true },
     h('div', { class: 'edit-scroll' },
       name.wrap,
