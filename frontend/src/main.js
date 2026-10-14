@@ -9,6 +9,7 @@ import { renderPasswordChange } from './views/password.js';
 import { renderAdmin } from './views/admin.js';
 import { renderMapPage } from './views/mapPage.js';
 import { renderFacilityEdit } from './views/facilityEdit.js';
+import { renderSituation } from './views/situation.js';
 import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
 import './styles/map.css';
 
@@ -73,6 +74,9 @@ async function route() {
     case 'einrichtung':
       if (me.role !== 'admin') return navigate('#/karte');
       cleanup = await renderFacilityEdit(root, { id: sub === 'neu' ? null : Number(sub), navigate });
+      return cleanup;
+    case 'lage':
+      cleanup = await renderSituation(root, { me, eventId: sub ? Number(sub) : null, navigate });
       return cleanup;
     case 'admin':
       if (me.role !== 'admin') return navigate('#/karte');

@@ -67,3 +67,9 @@ Object.assign(UI, {
   locate: [{ tag: 'circle', cx: 12, cy: 12, r: 3 }, 'M12 2v3M12 19v3M2 12h3M19 12h3'],
   trash: ['M4 7h16M10 11v6M14 11v6', 'M6 7l1 13h10l1-13M9 7V4h6v3'],
 });
+
+Object.assign(UI, {
+  polygon: 'M4 7 12 3l8 4v10l-8 4-8-4V7Z',
+  radius: [{ tag: 'circle', cx: 12, cy: 12, r: 9 }, 'M12 12h9'],
+  download: ['M12 4v11', 'm7 10 5 5 5-5', 'M5 20h14'],
+});

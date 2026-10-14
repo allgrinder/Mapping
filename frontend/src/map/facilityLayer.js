@@ -7,6 +7,7 @@ import { fromLonLat } from 'ol/proj.js';
 import { Icon, Style } from 'ol/style.js';
 import { SYMBOLS } from '../ui/icons.js';
 import { UTM } from './projection.js';
+import { affectedMarkerSvg } from './markers.js';
 
 const iconCache = new Map();
 
@@ -71,10 +72,12 @@ function clusterStyle(features, catById, surface, text) {
   });
 }
 
-export function createFacilityLayer(map, { categories, onSelect, colors }) {
+export function createFacilityLayer(map, { categories, onSelect, colors, cluster: useCluster = true }) {
   const catById = new Map(categories.map((c) => [c.id, c]));
   const source = new VectorSource();
-  const cluster = new Cluster({ source, distance: 44, minDistance: 16 });
+  const cluster = new Cluster({ source, distance: useCluster ? 44 : 0, minDistance: useCluster ? 16 : 0 });
+  let highlight = null;
+  const hlCache = new Map();
   let selectedId = null;
   let theme = colors();
   const layer = new VectorLayer({
@@ -84,7 +87,15 @@ export function createFacilityLayer(map, { categories, onSelect, colors }) {
       const members = f.get('features');
       if (members.length === 1) {
         const m = members[0];
-        return markerStyle(catById.get(m.get('categoryId')), m.getId() === selectedId, false);
+        const cat = catById.get(m.get('categoryId'));
+        if (highlight) {
+          const hl = highlight.get(m.getId());
+          if (!hl) return markerStyle(cat, false, true);
+          const key = `${cat?.id}|${hl.zone}|${hl.num}`;
+          if (!hlCache.has(key)) hlCache.set(key, new Style({ image: new Icon({ src: affectedMarkerSvg(cat?.color || '#5B6472', cat?.symbol, hl.zone, hl.num), anchor: [17, 23], anchorXUnits: 'pixels', anchorYUnits: 'pixels' }), zIndex: hl.zone === 'A' ? 30 : 20 }));
+          return hlCache.get(key);
+        }
+        return markerStyle(cat, m.getId() === selectedId, false);
       }
       return clusterStyle(members, catById, theme.surface, theme.text);
     },
@@ -92,7 +103,7 @@ export function createFacilityLayer(map, { categories, onSelect, colors }) {
   map.addLayer(layer);
 
   // Bei großem Maßstab nicht mehr bündeln
-  map.getView().on('change:resolution', () => cluster.setDistance(map.getView().getResolution() < 8 ? 0 : 44));
+  if (useCluster) map.getView().on('change:resolution', () => cluster.setDistance(map.getView().getResolution() < 8 ? 0 : 44));
 
   map.on('singleclick', (e) => {
     const hit = map.forEachFeatureAtPixel(e.pixel, (f, l) => (l === layer ? f : null), { hitTolerance: 4 });
@@ -119,6 +130,9 @@ export function createFacilityLayer(map, { categories, onSelect, colors }) {
       }));
     },
     select(id) { selectedId = id; layer.changed(); },
+    /** @param {Map<number,{zone:'A'|'B',num:number}>|null} m */
+    setHighlight(m) { highlight = m; layer.changed(); },
+    layer,
     restyle() { theme = colors(); layer.changed(); },
     centerOn(it, minRes = 40) {
       const v = map.getView();

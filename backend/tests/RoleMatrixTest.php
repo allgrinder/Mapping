@@ -36,6 +36,10 @@ final class RoleMatrixTest extends TestCase
         yield 'facility delete (fehlt)' => ['DELETE', '/api/facilities/999999', null, 401, 403, 404];
         yield 'geo resolve' => ['GET', '/api/geo/resolve?lon=7&lat=51', null, 401, 200, 200];
         yield 'geocode' => ['GET', '/api/geocode?q=ab', null, 401, 403, 422];
+        yield 'situation query (ungültig)' => ['POST', '/api/situation/query', ['definition' => null], 401, 422, 422];
+        yield 'events list' => ['GET', '/api/events', null, 401, 200, 200];
+        yield 'events create (ungültig)' => ['POST', '/api/events', ['name' => 'x'], 401, 422, 422];
+        yield 'event delete (fehlt)' => ['DELETE', '/api/events/999999', null, 401, 403, 404];
         yield 'change password' => ['POST', '/api/auth/change-password', ['currentPassword' => 'x', 'newPassword' => 'y'], 401, 422, 422];
     }
 

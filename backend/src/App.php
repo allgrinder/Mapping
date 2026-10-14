@@ -9,6 +9,8 @@ use Kritis\Controller\GeocodeController;
 use Kritis\Controller\MapController;
 use Kritis\Geo\AdminResolver;
 use Kritis\Controller\MasterDataController;
+use Kritis\Controller\SituationController;
+use Kritis\Geo\SituationService;
 use Kritis\Geo\TileService;
 use Kritis\Support\HttpClient;
 use Kritis\Controller\UserController;
@@ -55,13 +57,14 @@ final class App
         $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache');
         $facilities = new FacilityController($db, new AdminResolver($db));
         $geocode = new GeocodeController($services['geocoding'], $http, $config->get('storage') . '/cache');
+        $situation = new SituationController($db, new SituationService($db));
         $master = ['categories' => new MasterDataController($db, 'categories'), 'scenarios' => new MasterDataController($db, 'scenarios')];
 
         $any = fn () => new RequireAuth($db);
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $situation, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -88,6 +91,13 @@ final class App
             $g->delete('/facilities/{id:[0-9]+}', [$facilities, 'delete'])->add($admin());
             $g->get('/geo/resolve', [$facilities, 'resolve'])->add($any());
             $g->get('/geocode', [$geocode, 'search'])->add($admin());
+
+            $g->post('/situation/query', [$situation, 'query'])->add($any());
+            $g->get('/events', [$situation, 'list'])->add($any());
+            $g->post('/events', [$situation, 'create'])->add($any());
+            $g->get('/events/{id:[0-9]+}', [$situation, 'get'])->add($any());
+            $g->put('/events/{id:[0-9]+}', [$situation, 'update'])->add($any());
+            $g->delete('/events/{id:[0-9]+}', [$situation, 'delete'])->add($admin());
 
             foreach ($master as $path => $ctl) {
                 $g->get("/$path", [$ctl, 'list'])->add($any());

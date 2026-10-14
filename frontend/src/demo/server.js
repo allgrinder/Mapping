@@ -2,7 +2,10 @@
 // Daten liegen nur im localStorage dieses Browsers. Keine echte Sicherheit – nur zum Ausprobieren.
 import { ApiError } from '../api.js';
 import { RULES } from '../views/password.js';
-import { findContaining } from './geo.js';
+import { findContaining, pointInGeometry } from './geo.js';
+import proj4 from 'proj4';
+import '../map/projection.js';
+import turfBuffer from '@turf/buffer';
 import { SAMPLES } from './samples.js';
 
 const KEY = 'kl-demo-v1';
@@ -193,6 +196,8 @@ export async function handle(method, path, body) {
       };
     }
     case 'facilities': return facilities(method, rest, body);
+    case 'situation': requireUser(); return situation(body?.definition, body?.bufferM ?? 0);
+    case 'events': return events(method, rest, body);
     case 'geo':
       requireUser();
       return resolve(Number(new URLSearchParams(path.split('?')[1]).get('lon')), Number(new URLSearchParams(path.split('?')[1]).get('lat')));
@@ -305,4 +310,67 @@ export async function loadSampleData() {
   }
   db.facilitiesChangedAt = now();
   save();
+}
+
+// ---------------- Lagemodus ----------------
+async function buildArea(def) {
+  const bad = (m) => fail(422, 'validation_failed', m, { definition: m });
+  if (!def || typeof def.type !== 'string') bad('Bitte ein Ereignisgebiet festlegen.');
+  if (def.type === 'polygon') {
+    const ring = [...def.coordinates];
+    if (ring.length < 3) bad('Die Fläche braucht mindestens drei Eckpunkte.');
+    if (String(ring[0]) !== String(ring[ring.length - 1])) ring.push(ring[0]);
+    return { area: { type: 'Polygon', coordinates: [ring] }, label: 'Gezeichnete Fläche', definition: { type: 'polygon', coordinates: ring } };
+  }
+  if (def.type === 'circle') {
+    const r = def.radiusM;
+    if (typeof r !== 'number' || r < 50 || r > 100000) bad('Der Radius muss zwischen 50 m und 100 km liegen.');
+    const [e, n] = proj4('EPSG:4326', 'EPSG:25832', def.center);
+    const ring = [];
+    for (let i = 0; i <= 72; i++) { const a = (2 * Math.PI * (i % 72)) / 72; ring.push(proj4('EPSG:25832', 'EPSG:4326', [e + r * Math.cos(a), n + r * Math.sin(a)])); }
+    return { area: { type: 'Polygon', coordinates: [ring] }, label: `Radius ${(r / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`, definition: { type: 'circle', center: def.center, radiusM: r } };
+  }
+  if (def.type === 'boundary') {
+    const fc = await staticJson(`boundaries-${def.level}.json`, null);
+    const f = fc?.features?.find((x) => x.properties.code === def.code) || bad('Das gewählte Gebiet ist nicht vorhanden.');
+    const lbl = { regbez: 'Regierungsbezirk', kreis: 'Kreis/Stadt', gemeinde: 'Gemeinde', plz5: 'PLZ', plz2: 'PLZ-Region' }[def.level];
+    return { area: f.geometry, label: `${lbl} ${f.properties.name}`, definition: { type: 'boundary', level: def.level, code: def.code } };
+  }
+  return bad('Unbekannter Gebietstyp.');
+}
+
+async function situation(def, bufferM) {
+  if (typeof bufferM !== 'number' || bufferM < 0 || bufferM > 50000) fail(422, 'validation_failed', 'Die Pufferzone muss zwischen 0 und 50 km liegen.', { bufferM: 'Ungültig.' });
+  const a = await buildArea(def);
+  const buffer = bufferM > 0 ? turfBuffer({ type: 'Feature', properties: {}, geometry: a.area }, bufferM / 1000, { units: 'kilometers', steps: 16 })?.geometry : null;
+  const byLat = (x, y) => y.location.lat - x.location.lat || x.location.lon - y.location.lon;
+  const all = db.facilities.map(presentFacility);
+  const inArea = all.filter((f) => pointInGeometry([f.location.lon, f.location.lat], a.area)).sort(byLat);
+  const ids = new Set(inArea.map((f) => f.id));
+  const inBuffer = buffer ? all.filter((f) => !ids.has(f.id) && pointInGeometry([f.location.lon, f.location.lat], buffer)).sort(byLat) : [];
+  return { definition: a.definition, label: a.label, bufferM, area: a.area, buffer, inArea, inBuffer };
+}
+
+async function events(method, rest, body) {
+  const actor = requireUser();
+  db.events ??= [];
+  const slim = (f) => ({ id: f.id, name: f.name, categoryId: f.categoryId, address: f.address, location: f.location, admin: f.admin, hazards: f.hazards, contact: f.contact });
+  const present = (e) => ({ ...structuredClone(e), createdBy: db.users.find((u) => u.id === e.createdById)?.username, updatedBy: db.users.find((u) => u.id === e.updatedById)?.username });
+  const store = async (e) => {
+    if (typeof body?.name !== 'string' || body.name.trim().length < 2) fail(422, 'validation_failed', 'Eingaben ungültig.', { name: 'Länge muss zwischen 2 und 200 Zeichen liegen.' });
+    const r = await situation(body.definition, body.bufferM ?? 0);
+    Object.assign(e, { name: body.name.trim(), bufferM: r.bufferM, definition: r.definition, snapshot: { label: r.label, takenAt: now(), inArea: r.inArea.map(slim), inBuffer: r.inBuffer.map(slim) }, updatedAt: now(), updatedById: actor.id });
+    return e;
+  };
+  if (method === 'GET' && !rest) return { items: [...db.events].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1)).map((e) => ({ id: e.id, name: e.name, occurredAt: e.occurredAt, bufferM: e.bufferM, label: e.snapshot.label, counts: { inArea: e.snapshot.inArea.length, inBuffer: e.snapshot.inBuffer.length }, createdAt: e.createdAt, createdBy: present(e).createdBy })) };
+  if (method === 'POST' && !rest) {
+    const e = await store({ id: ++db.seq, occurredAt: now(), createdAt: now(), createdById: actor.id });
+    db.events.push(e); save();
+    return present(e);
+  }
+  const e = db.events.find((x) => String(x.id) === rest) || fail(404, 'not_found', 'Ereignis nicht gefunden.');
+  if (method === 'GET') return present(e);
+  if (method === 'PUT') { await store(e); save(); return present(e); }
+  if (method === 'DELETE') { requireUser('admin'); db.events = db.events.filter((x) => x !== e); save(); return { ok: true }; }
+  return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
 }
