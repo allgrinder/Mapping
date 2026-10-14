@@ -5,6 +5,8 @@ services:
       context: ./docker/php
       args: { PHP_VERSION: "${PHP_VERSION:-8.3}" }
     volumes: [".:/app"]
+    # Feste DNS-Server: In Codespaces/Docker-in-Docker löst der Container sonst keine Hostnamen auf (Composer-Downloads schlagen fehl).
+    dns: ["1.1.1.1", "8.8.8.8"]
     environment:
       APP_ENV: development
       DB_HOST: db
