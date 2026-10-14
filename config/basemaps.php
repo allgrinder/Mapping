@@ -30,8 +30,8 @@ return [
             'type' => 'tiles',
             'format' => 'png',
             'attribution' => '© Geobasis NRW, © BKG',
-            // null = nur lokale Kacheln (kein Netzzugriff). 'dtk' = WMS aus services.php → wms.dtk
-            'upstream' => $env('TOPO_UPSTREAM', 'dtk'),
+            // 'dtk' = fehlende Kacheln beim WMS aus services.php → wms.dtk nachladen; 'none' = nur lokaler Vorrat (kein Netzzugriff)
+            'upstream' => ($u = $env('TOPO_UPSTREAM', 'dtk')) === 'none' ? null : $u,
         ],
         'politisch' => [
             'label' => 'Politisch',

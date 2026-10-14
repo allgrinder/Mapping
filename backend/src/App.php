@@ -57,7 +57,7 @@ final class App
         $services = require $root . '/config/services.php';
         $basemaps = require $root . '/config/basemaps.php';
         $http = new HttpClient((string) $config->get('outbound_proxy', ''), (int) $services['http']['timeout'], (string) $services['http']['user_agent']);
-        $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http);
+        $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http, $config->get('storage') . '/cache');
         $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache', $services);
         $facilities = new FacilityController($db, new AdminResolver($db));
         $import = new ImportController($db, $facilities);

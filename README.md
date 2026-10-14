@@ -66,15 +66,28 @@ Bezugsquellen und Lizenzen stehen in `config/services.php` (→ `boundaries`). D
    ```
 Feldnamen und Dateimuster sind in `config/boundaries.php` anpassbar. Ein erneuter Import ersetzt die jeweilige Ebene.
 
-## Hintergrundkarten (offline-first)
+## Hintergrundkarten (offline-first, krisenfest)
 `config/basemaps.php`: „Politisch“ wird aus den importierten Grenzen gezeichnet und braucht nie Netz.
-„Topografisch“ nutzt Kacheln aus `backend/storage/tiles/topografisch/`. Ist eine Quelle gesetzt (`TOPO_UPSTREAM=dtk` und
-`DTK_WMS_LAYERS=<Layername aus den GetCapabilities des DTK-WMS>`), lädt der Server fehlende Kacheln über den Proxy nach und speichert sie.
-Für Betrieb ohne Internet die Kacheln vorab erzeugen und das Verzeichnis kopieren:
+
+„Topografisch“ (DTK von Geobasis NRW) arbeitet zweistufig:
+1. **Vorrat auf dem Server:** Kacheln liegen in `backend/storage/tiles/topografisch/` und werden immer zuerst ausgeliefert – ohne Netz.
+2. **Automatisches Nachladen:** Fehlt eine Kachel und ist der DTK-WMS erreichbar (`TOPO_UPSTREAM=dtk`, über `OUTBOUND_PROXY`),
+   holt der Server sie und legt sie dauerhaft ab. Den Layer wählt er selbst aus den GetCapabilities (farbiger Sammellayer in EPSG:25832)
+   und merkt ihn sich 30 Tage; fällt der Dienst aus, bleibt die letzte Wahl gültig. Festlegen lässt er sich mit `DTK_WMS_LAYERS=<Name>`.
+
+Prüfen, welche Layer der Dienst anbietet und welcher gewählt wird:
 ```
-php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=6
+php bin/wms-layers.php dtk
 ```
-Ohne Kacheln und ohne Quelle ist „Topografisch“ in der Oberfläche ausgegraut.
+Vorrat anlegen (auf einem Rechner mit Netz; abgebrochene Läufe einfach neu starten, Vorhandenes wird übersprungen):
+```
+php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=7 --dry-run      # Anzahl/Größe anzeigen
+php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=7                # ganz NRW bis ca. 9 m/Pixel (~22.000 Kacheln)
+php bin/prefetch-tiles.php --basemap=topografisch --min-zoom=8 --max-zoom=10 \
+    --extent=340000,5620000,380000,5660000                                    # Detailstufen für einen Ausschnitt (EPSG:25832)
+```
+Danach `backend/storage/tiles/topografisch/` auf den Zielserver kopieren. Ohne Vorrat und ohne erreichbaren Dienst ist „Topografisch“
+in der Oberfläche ausgegraut. Zusätzlich hält der Browser die zuletzt angesehenen Kacheln offline vor (Service Worker).
 
 ## Offline-Betrieb
 Der Service Worker (`sw.js`, beim Frontend-Build erzeugt) speichert App, letzten Datenstand (Einrichtungen, Stammdaten, Grenzen,
@@ -108,7 +121,7 @@ werden aus den GetCapabilities ermittelt (HQhäufig/HQ100/HQextrem); bei Bedarf 
 | `LOGIN_MAX_PER_USER` / `LOGIN_MAX_PER_IP` / `LOGIN_WINDOW` | 5 / 30 / 900 | Login-Ratenbegrenzung |
 | `TRUST_PROXY_HEADERS` | false | `X-Forwarded-For` nur hinter vertrauenswürdigem Proxy |
 | `OUTBOUND_PROXY` | leer | ausgehender Proxy für externe Dienste |
-| `TOPO_UPSTREAM` / `DTK_WMS_LAYERS` | dtk / leer | Quelle für topografische Kacheln; ohne Layername kein Netzzugriff |
+| `TOPO_UPSTREAM` / `DTK_WMS_LAYERS` | dtk / leer | Quelle für topografische Kacheln; Layer leer = automatisch aus den GetCapabilities, `TOPO_UPSTREAM=none` = nur lokaler Vorrat, nie Netz |
 | `BASEMAP_DEFAULT` | politisch | Start-Hintergrund |
 | `GEOCODER_URL` | Nominatim | Adresssuche; `off` = abgeschaltet (Standort per Klick setzen) |
 | `GEOCODER_MIN_INTERVAL_MS` | 1100 | Mindestabstand zwischen Anfragen (Nutzungsbedingungen Nominatim) |

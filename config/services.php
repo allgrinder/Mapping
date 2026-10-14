@@ -37,8 +37,10 @@ return [
             'url' => 'https://www.wms.nrw.de/geobasis/wms_nw_dtk',
             'capabilities' => 'https://www.wms.nrw.de/geobasis/wms_nw_dtk?REQUEST=GetCapabilities&SERVICE=WMS',
             'version' => '1.3.0',
-            // Layername aus den GetCapabilities übernehmen und per Umgebungsvariable setzen – nicht geraten.
+            // Leer = Layer automatisch aus den GetCapabilities wählen (Sammellayer, farbig, EPSG:25832; wird gemerkt).
+            // Zum Festlegen den Namen aus `php bin/wms-layers.php dtk` per Umgebungsvariable setzen.
             'layers' => $env('DTK_WMS_LAYERS', ''),
+            'prefer' => 'dtk',
             'license' => 'dl-de/zero-2.0 (BKG-Anteile DTK250/DTK500: dl-de/by-2.0)',
             'attribution' => '© Geobasis NRW, © BKG',
             'verified' => true,

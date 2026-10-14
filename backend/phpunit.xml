@@ -3,6 +3,8 @@
   <testsuites><testsuite name="backend"><directory>tests</directory></testsuite></testsuites>
   <php>
     <env name="APP_ENV" value="testing" force="true"/>
+    <!-- Tests ohne Zugriff auf externe Kartendienste -->
+    <env name="TOPO_UPSTREAM" value="none" force="true"/>
     <env name="DB_NAME" value="kritis_test" force="false"/>
     <env name="DB_USER" value="kritis" force="false"/>
     <env name="DB_PASS" value="kritis" force="false"/>
