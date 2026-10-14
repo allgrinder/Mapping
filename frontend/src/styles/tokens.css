@@ -1,0 +1,32 @@
+/* Design-Tokens aus dem Claude-Design „KRITIS-Lagekarte NRW“ (Boards 01–13). */
+.kl {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, "Segoe UI", sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.kl-light {
+  --map-bg: #E4E8EC; --land: #FBFBF9; --land-line: #A9B1BC; --water-line: #5E9FD8; --label: #4C535E;
+  --glass: rgba(255,255,255,.78); --glass-edge: rgba(255,255,255,.85); --line: rgba(15,23,42,.1);
+  --text: #111318; --text-2: #3F4651; --text-3: #5D6470; --surface: #FFFFFF; --page: #F4F5F7;
+  --fill: rgba(116,122,134,.12); --fill-2: rgba(116,122,134,.22);
+  --accent: #0A66D8; --accent-weak: rgba(10,102,216,.12);
+  --event: #C2510A; --event-bar: #B0460A; --event-weak: rgba(217,96,17,.12);
+  --danger: #C42B2B; --danger-weak: rgba(196,43,43,.1); --ok: #1E7F46; --ok-weak: rgba(30,127,70,.12);
+  --shadow: 0 30px 80px rgba(15,23,42,.16), 0 2px 8px rgba(15,23,42,.06);
+  --shadow-sm: 0 4px 14px rgba(15,23,42,.16); --ring: #FFFFFF;
+  color-scheme: light;
+}
+.kl-dark {
+  --map-bg: #0F1114; --land: #1B1E23; --land-line: #4A515C; --water-line: #3577B6; --label: #A6AFBB;
+  --glass: rgba(30,32,37,.78); --glass-edge: rgba(255,255,255,.09); --line: rgba(255,255,255,.1);
+  --text: #F3F5F8; --text-2: #C5CCD6; --text-3: #9DA6B2; --surface: #262A30; --page: #0F1114;
+  --fill: rgba(140,147,160,.18); --fill-2: rgba(140,147,160,.3);
+  --accent: #4C95F2; --accent-weak: rgba(76,149,242,.18);
+  --event: #F08A3C; --event-bar: #B0460A; --event-weak: rgba(240,138,60,.16);
+  --danger: #F06A63; --danger-weak: rgba(240,106,99,.14); --ok: #4CC27D; --ok-weak: rgba(76,194,125,.16);
+  --shadow: 0 30px 80px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.3);
+  --shadow-sm: 0 4px 14px rgba(0,0,0,.45); --ring: #1B1E23;
+  color-scheme: dark;
+}

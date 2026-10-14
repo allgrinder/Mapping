@@ -23,7 +23,7 @@ final class UserController
 
     public function list(Request $req, Response $res): Response
     {
-        $rows = $this->db->query('SELECT id, username, role, active, must_change_password, created_at, updated_at FROM users ORDER BY username')->fetchAll();
+        $rows = $this->db->query('SELECT id, username, display_name, role, active, must_change_password, last_login_at, created_at, updated_at FROM users ORDER BY COALESCE(display_name, username)')->fetchAll();
         return Json::respond($res, ['items' => array_map($this->present(...), $rows)]);
     }
 
@@ -31,6 +31,7 @@ final class UserController
     {
         $v = new Validator((array) $req->getParsedBody());
         $username = $v->string('username', 3, 64, '/^[A-Za-z0-9._@-]+$/');
+        $displayName = $v->has('displayName') ? $v->string('displayName', 0, 120) : '';
         $role = $v->enum('role', self::ROLES);
         $v->assertValid();
         $exists = $this->db->prepare('SELECT 1 FROM users WHERE username = ?');
@@ -40,8 +41,8 @@ final class UserController
         }
         $initial = PasswordPolicy::generate();
         $actor = $req->getAttribute('user')['id'];
-        $this->db->prepare('INSERT INTO users (username, password_hash, role, must_change_password, created_by, updated_by) VALUES (?,?,?,1,?,?)')
-            ->execute([$username, $this->hasher->hash($initial), $role, $actor, $actor]);
+        $this->db->prepare('INSERT INTO users (username, display_name, password_hash, role, must_change_password, created_by, updated_by) VALUES (?,?,?,?,1,?,?)')
+            ->execute([$username, $displayName !== '' ? $displayName : null, $this->hasher->hash($initial), $role, $actor, $actor]);
         return Json::respond($res, ['id' => (int) $this->db->lastInsertId(), 'initialPassword' => $initial], 201);
     }
 
@@ -49,16 +50,17 @@ final class UserController
     {
         $id = $this->id($args);
         $v = new Validator((array) $req->getParsedBody());
-        $role = $v->enum('role', self::ROLES);
-        $active = $v->bool('active', true);
+        $target = $this->find($id);
+        $role = $v->has('role') ? $v->enum('role', self::ROLES) : $target['role'];
+        $active = $v->bool('active', (bool) (int) $target['active']);
+        $displayName = $v->has('displayName') ? $v->string('displayName', 0, 120) : (string) $target['display_name'];
         $v->assertValid();
         $actor = $req->getAttribute('user')['id'];
-        $target = $this->find($id);
         if ($target['role'] === 'admin' && ($role !== 'admin' || !$active)) {
             $this->assertNotLastAdmin($id);
         }
-        $this->db->prepare('UPDATE users SET role = ?, active = ?, updated_at = UTC_TIMESTAMP(), updated_by = ? WHERE id = ?')
-            ->execute([$role, (int) $active, $actor, $id]);
+        $this->db->prepare('UPDATE users SET display_name = ?, role = ?, active = ?, updated_at = UTC_TIMESTAMP(), updated_by = ? WHERE id = ?')
+            ->execute([$displayName !== '' ? $displayName : null, $role, (int) $active, $actor, $id]);
         if (!$active || $role !== $target['role']) {
             $this->sessions->deleteForUser($id);
         }
@@ -101,7 +103,7 @@ final class UserController
     /** @return array<string,mixed> */
     private function find(int $id): array
     {
-        $st = $this->db->prepare('SELECT id, username, role, active FROM users WHERE id = ?');
+        $st = $this->db->prepare('SELECT id, username, display_name, role, active FROM users WHERE id = ?');
         $st->execute([$id]);
         return $st->fetch() ?: throw new HttpException(404, 'not_found', 'Benutzer nicht gefunden.');
     }
@@ -119,9 +121,9 @@ final class UserController
     private function present(array $r): array
     {
         return [
-            'id' => (int) $r['id'], 'username' => $r['username'], 'role' => $r['role'],
+            'id' => (int) $r['id'], 'username' => $r['username'], 'displayName' => $r['display_name'] ?? null, 'role' => $r['role'],
             'active' => (bool) (int) $r['active'], 'mustChangePassword' => (bool) (int) $r['must_change_password'],
-            'createdAt' => $r['created_at'] ?? null, 'updatedAt' => $r['updated_at'] ?? null,
+            'lastLoginAt' => $r['last_login_at'] ?? null, 'createdAt' => $r['created_at'] ?? null, 'updatedAt' => $r['updated_at'] ?? null,
         ];
     }
 }

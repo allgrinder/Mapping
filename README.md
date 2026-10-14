@@ -2,11 +2,24 @@
 
 Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUNGSPLAN.md](docs/UMSETZUNGSPLAN.md).
 
-**Stand:** Stufe 1, Arbeitspaket 1 (Backend-Gerüst, Anmeldung, Sitzungen, CSRF, Rollen, Tests). Frontend und Karte folgen.
+**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Die Karte folgt in Arbeitspaket 3.
 
 ## Technik
 PHP ≥ 8.3 (Mindestversion über `PHP_MIN_VERSION` konfigurierbar), Slim 4, MariaDB ≥ 10.11 (PDO), Composer.
 Karte (folgt): OpenLayers, EPSG:25832, **offline-first** – Kartenquellen sind austauschbar (siehe Plan Abschnitt 2a).
+
+## Frontend bauen
+Node.js ≥ 20 wird nur zum Bauen benötigt, nicht im Betrieb. Alle Bibliotheken werden lokal gebündelt (keine CDN).
+```
+cd frontend && npm ci && npm run build   # schreibt nach backend/public/
+npm test                                  # Vitest
+```
+
+## Entwicklung ohne Docker
+```
+cd backend && php -S 127.0.0.1:8000 -t public bin/dev-router.php   # mit APP_ENV=development COOKIE_SECURE=false HSTS=false
+cd frontend && npm run dev                                         # http://localhost:5173, /api wird an :8000 weitergeleitet
+```
 
 ## Entwicklung mit Docker
 ```
@@ -15,13 +28,14 @@ docker compose exec php composer install
 docker compose exec php php bin/migrate.php
 docker compose exec php php bin/seed.php      # gibt das Initialpasswort des Admins einmalig aus
 ```
+Vorher einmal das Frontend bauen (siehe oben).
 Anwendung: http://localhost:8080 (API unter `/api`).
 
 ## Installation ohne Docker (IT.NRW)
 1. PHP ≥ 8.3 mit `pdo_mysql`, `sodium`, `mbstring`, `intl`; MariaDB ≥ 10.11.
 2. Datenbank und Benutzer anlegen (`utf8mb4`), Zugangsdaten per Umgebungsvariablen setzen:
    `DB_HOST DB_PORT DB_NAME DB_USER DB_PASS`.
-3. `cd backend && composer install --no-dev --optimize-autoloader`
+3. `cd backend && composer install --no-dev --optimize-autoloader`; Frontend-Build (`backend/public/index.html` und `assets/`) aus dem Release übernehmen oder selbst bauen.
 4. `php bin/migrate.php && php bin/seed.php`
 5. Webserver-DocumentRoot auf `backend/public`; Anfragen unter `/api/` an `index.php` weiterleiten (Beispiel: `docker/nginx/default.conf`). **Nur HTTPS betreiben** (Session-Cookie ist `Secure`).
 
@@ -40,4 +54,6 @@ Benötigen eine MariaDB mit Datenbank `kritis_test` (Benutzer/Passwort per `DB_U
 ```
 cd backend && composer install && vendor/bin/phpunit
 ```
-Geprüft werden u. a. Login, Sitzungshärtung, CSRF, Ratenbegrenzung, Passwortwechsel, Eingabevalidierung/SQL-Injection und die Rechtematrix (Route × anonym/lesen/admin).
+Frontend: `cd frontend && npm test`.
+
+Geprüft werden u. a. Login, Sitzungshärtung, CSRF, Ratenbegrenzung, Passwortwechsel, Eingabevalidierung/SQL-Injection und die Rechtematrix (Route × anonym/lesen/admin), Stammdaten-Pflege (Reihenfolge, Löschschutz bei Verwendung).

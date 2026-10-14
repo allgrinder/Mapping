@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Kritis;
 
 use Kritis\Controller\AuthController;
+use Kritis\Controller\MasterDataController;
 use Kritis\Controller\UserController;
 use Kritis\Http\Middleware\CsrfMiddleware;
 use Kritis\Http\Middleware\ErrorMiddleware;
@@ -40,12 +41,13 @@ final class App
         $store = new SessionStore($db, (int) $config->get('session.idle_ttl'), (int) $config->get('session.absolute_ttl'));
         $auth = new AuthController($db, $config, $hasher, $policy, $limiter, $store);
         $users = new UserController($db, $hasher, $store);
+        $master = ['categories' => new MasterDataController($db, 'categories'), 'scenarios' => new MasterDataController($db, 'scenarios')];
 
         $any = fn () => new RequireAuth($db);
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -60,6 +62,14 @@ final class App
             $g->put('/users/{id}', [$users, 'update'])->add($admin());
             $g->delete('/users/{id}', [$users, 'delete'])->add($admin());
             $g->post('/users/{id}/reset-password', [$users, 'resetPassword'])->add($admin());
+
+            foreach ($master as $path => $ctl) {
+                $g->get("/$path", [$ctl, 'list'])->add($any());
+                $g->post("/$path", [$ctl, 'create'])->add($admin());
+                $g->put("/$path/order", [$ctl, 'reorder'])->add($admin());
+                $g->put("/$path/{id:[0-9]+}", [$ctl, 'update'])->add($admin());
+                $g->delete("/$path/{id:[0-9]+}", [$ctl, 'delete'])->add($admin());
+            }
         })->add(new CsrfMiddleware())->add(new JsonBodyMiddleware());
 
         // Reihenfolge (zuletzt hinzugefügt = äußerste Schicht): Headers → Session → Fehler → Routing

@@ -25,12 +25,9 @@ final class CsrfMiddleware implements MiddlewareInterface
             }
             $origin = $request->getHeaderLine('Origin');
             if ($origin !== '') {
-                $u = $request->getUri();
-                $host = $request->getHeaderLine('Host') ?: $u->getHost();
+                // Hostname-Vergleich (Port/Schema können hinter TLS-Terminierung abweichen; Slim entfernt den Port aus Host).
                 $oh = parse_url($origin, PHP_URL_HOST);
-                $op = parse_url($origin, PHP_URL_PORT);
-                $originHost = $oh . ($op ? ':' . $op : '');
-                if (!is_string($oh) || strcasecmp($originHost, $host) !== 0) {
+                if (!is_string($oh) || strcasecmp($oh, $request->getUri()->getHost()) !== 0) {
                     throw new HttpException(403, 'origin_invalid', 'Ungültiger Origin.');
                 }
             }

@@ -35,7 +35,7 @@ final class AuthController
         $s = $req->getAttribute('session');
         $user = null;
         if ($s->userId !== null) {
-            $st = $this->db->prepare('SELECT id, username, role, must_change_password FROM users WHERE id = ? AND active = 1');
+            $st = $this->db->prepare('SELECT id, username, display_name, role, must_change_password FROM users WHERE id = ? AND active = 1');
             $st->execute([$s->userId]);
             if ($row = $st->fetch()) {
                 $user = $this->present($row);
@@ -65,7 +65,7 @@ final class AuthController
             throw new HttpException(429, 'rate_limited', 'Zu viele Anmeldeversuche. Bitte später erneut versuchen.', [], ['Retry-After' => (string) $wait]);
         }
 
-        $st = $this->db->prepare('SELECT id, username, password_hash, role, must_change_password, active FROM users WHERE username = ?');
+        $st = $this->db->prepare('SELECT id, username, display_name, password_hash, role, must_change_password, active FROM users WHERE username = ?');
         $st->execute([$username]);
         $u = $st->fetch();
         $ok = $this->hasher->verify($password, $u ? $u['password_hash'] : $this->hasher->dummy());
@@ -76,6 +76,7 @@ final class AuthController
             throw new HttpException(401, 'invalid_credentials', 'Benutzername oder Passwort falsch.');
         }
         $this->limiter->reset($uBucket);
+        $this->db->prepare('UPDATE users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$u['id']]);
         if ($this->hasher->needsRehash($u['password_hash'])) {
             $this->db->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([$this->hasher->hash($password), $u['id']]);
         }
@@ -126,6 +127,7 @@ final class AuthController
         return [
             'id' => (int) $row['id'],
             'username' => $row['username'],
+            'displayName' => $row['display_name'] ?? null,
             'role' => $row['role'],
             'mustChangePassword' => (bool) (int) $row['must_change_password'],
         ];

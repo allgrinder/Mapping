@@ -45,6 +45,14 @@ final class AuthTest extends TestCase
         $this->assertSame('origin_invalid', $r['body']['error']['code']);
     }
 
+    public function testSameOriginWithPortIsAccepted(): void
+    {
+        $this->makeUser('anna', 'lesen');
+        $this->freshClient();
+        $r = $this->call('POST', '/api/auth/login', ['username' => 'anna', 'password' => self::PW], true, ['Origin' => 'http://localhost:8000']);
+        $this->assertSame(200, $r['status']);
+    }
+
     public function testLoginSuccessRegeneratesSessionAndCsrf(): void
     {
         $this->makeUser('anna', 'lesen');
