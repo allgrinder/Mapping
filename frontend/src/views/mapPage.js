@@ -35,7 +35,6 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
   const page = h('div', { class: 'map-page' }, canvas, notice);
   root.replaceChildren(page);
 
-  const later = (what) => () => toast(notice, `${what} folgt in einem der nächsten Arbeitspakete.`);
   const map = await createMap(canvas, cfg);
 
   // ---------- Seitenleiste ----------
@@ -148,7 +147,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
   const toolbar = h('div', { class: 'ctl toolbar' },
     h('div', { class: 'glass tool-group' },
       h('button', { class: 'btn btn-event', type: 'button', onClick: () => navigate('#/lage') }, svg(UI.situation, { size: 16, stroke: 2.2 }), 'Lagemodus'),
-      h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Drucken', title: 'Drucken', onClick: later('Der Druck') }, svg(UI.print)),
+      h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Drucken', title: 'Drucken', onClick: () => navigate('#/druck') }, svg(UI.print)),
       themeBtn, avatar));
 
   // ---------- Zoom / Ebenen ----------

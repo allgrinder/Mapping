@@ -10,6 +10,7 @@ import { renderAdmin } from './views/admin.js';
 import { renderMapPage } from './views/mapPage.js';
 import { renderFacilityEdit } from './views/facilityEdit.js';
 import { renderSituation } from './views/situation.js';
+import { renderPrintDialog } from './views/printDialog.js';
 import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
 import './styles/map.css';
 
@@ -78,6 +79,8 @@ async function route() {
     case 'lage':
       cleanup = await renderSituation(root, { me, eventId: sub ? Number(sub) : null, navigate });
       return cleanup;
+    case 'druck':
+      return renderPrintDialog(root, { navigate });
     case 'admin':
       if (me.role !== 'admin') return navigate('#/karte');
       return renderAdmin(root, { me, tab: sub, navigate });
