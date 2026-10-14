@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true" cacheDirectory=".phpunit.cache" failOnWarning="true" failOnRisky="true">
+  <testsuites><testsuite name="backend"><directory>tests</directory></testsuite></testsuites>
+  <php>
+    <env name="APP_ENV" value="testing" force="true"/>
+    <env name="DB_NAME" value="kritis_test" force="false"/>
+    <env name="DB_USER" value="kritis" force="false"/>
+    <env name="DB_PASS" value="kritis" force="false"/>
+  </php>
+</phpunit>

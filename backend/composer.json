@@ -1,0 +1,33 @@
+{
+  "name": "itnrw/kritis-lagekarte",
+  "description": "KRITIS-Lagekarte NRW \u2013 Backend",
+  "type": "project",
+  "require": {
+    "php": ">=8.3",
+    "ext-sodium": "*",
+    "ext-mbstring": "*",
+    "slim/slim": "^4.14",
+    "slim/psr7": "^1.7",
+    "ext-pdo": "*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Kritis\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Kritis\\Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "platform-check": true
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}

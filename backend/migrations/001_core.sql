@@ -1,0 +1,63 @@
+CREATE TABLE users (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(64) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('lesen','admin') NOT NULL DEFAULT 'lesen',
+  must_change_password TINYINT(1) NOT NULL DEFAULT 1,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  created_by INT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  updated_by INT UNSIGNED NULL,
+  UNIQUE KEY uq_users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE sessions (
+  id_hash CHAR(64) NOT NULL PRIMARY KEY,
+  user_id INT UNSIGNED NULL,
+  csrf_token CHAR(43) NOT NULL,
+  created_at INT UNSIGNED NOT NULL,
+  last_seen INT UNSIGNED NOT NULL,
+  KEY ix_sessions_user (user_id),
+  KEY ix_sessions_seen (last_seen),
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=ascii;
+CREATE TABLE rate_limits (
+  bucket VARCHAR(128) NOT NULL PRIMARY KEY,
+  hits INT UNSIGNED NOT NULL DEFAULT 0,
+  window_start INT UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=ascii;
+CREATE TABLE audit_log (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  user_id INT UNSIGNED NULL,
+  action VARCHAR(64) NOT NULL,
+  detail TEXT NULL,
+  ip VARCHAR(45) NULL,
+  KEY ix_audit_at (at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE categories (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  color CHAR(7) NOT NULL,
+  symbol VARCHAR(40) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  created_by INT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  updated_by INT UNSIGNED NULL,
+  UNIQUE KEY uq_categories_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE scenarios (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  color CHAR(7) NOT NULL,
+  symbol VARCHAR(40) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  created_by INT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  updated_by INT UNSIGNED NULL,
+  UNIQUE KEY uq_scenarios_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

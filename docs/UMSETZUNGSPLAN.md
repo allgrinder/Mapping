@@ -29,8 +29,8 @@ Beim Bau lese ich alle Boards vollständig und gleiche Maße ab; Abweichungen me
 
 ```
 /
-├─ docker-compose.yml        # php-fpm, nginx, mongo, (node nur für Frontend-Build)
-├─ docker/ (php/Dockerfile, nginx/default.conf, mongo/init)
+├─ docker-compose.yml        # php-fpm, nginx, mariadb, (node nur für Frontend-Build)
+├─ docker/ (php/Dockerfile, nginx/default.conf, mariadb/init)
 ├─ README.md                 # Installation/Betrieb für IT.NRW
 ├─ docs/ (UMSETZUNGSPLAN.md, BETRIEB.md, SICHERHEIT.md  ← Mapping auf APP.3.1)
 ├─ config/
@@ -38,18 +38,18 @@ Beim Bau lese ich alle Boards vollständig und gleiche Maße ab; Abweichungen me
 │  ├─ services.php           # ALLE externen Endpunkte + Lizenz/Attribution (recherchiert, nicht geraten)
 │  └─ .env.example
 ├─ backend/
-│  ├─ composer.json          # slim/slim, mongodb/mongodb, php-di, monolog, phpunit …
+│  ├─ composer.json          # slim/slim, slim/psr7, phpunit (DB via PDO)
 │  ├─ public/index.php       # Front-Controller
 │  ├─ src/
 │  │  ├─ Http/ (Routes, Middleware: Auth, Rolle, CSRF, RateLimit, SecurityHeaders/CSP, Json-Fehler)
 │  │  ├─ Controller/  Auth, Facility, Category, Scenario, User, Boundary, Event, Geocode, Proxy, Warning, Export
-│  │  ├─ Domain/      Repositories (MongoDB), Services (Admin-Zuordnung, Lage-Abfrage, Puffer)
+│  │  ├─ Domain/      Repositories (MariaDB), Services (Admin-Zuordnung, Lage-Abfrage, Puffer)
 │  │  ├─ Validation/  strikte Typ-/Schema-Prüfung, Operator-Injection-Filter
 │  │  ├─ Geo/         Puffer, Projektion 4326↔25832, Point-in-Polygon
 │  │  └─ Proxy/       HTTP-Client (ausgehender Proxy), Cache, Allowlist
 │  ├─ bin/ (seed.php, import-boundaries.php, create-indexes.php)
 │  ├─ storage/ (cache, boundaries-download, logs)  # nicht web-erreichbar
-│  └─ tests/ (Unit + Integration gegen echte MongoDB)
+│  └─ tests/ (Unit + Integration gegen echte MariaDB)
 └─ frontend/                 # Vite, Vanilla-JS (ES-Module), OpenLayers, proj4 – alles lokal gebündelt
    ├─ src/ (main.js, api/, state/, map/, ui/, views/, print/, offline/, styles/)
    ├─ public/ (sw.js, manifest, Icons)
@@ -58,20 +58,35 @@ Beim Bau lese ich alle Boards vollständig und gleiche Maße ab; Abweichungen me
 
 Auslieferung: `vite build` → `backend/public/assets`. Keine Runtime-Abhängigkeit von Node auf dem Server.
 
-## 2. Datenmodell (MongoDB)
+## 2. Datenmodell (MariaDB 10.11+, InnoDB, utf8mb4)
 
-- **users**: `username` (unique), `passwordHash` (Argon2id), `role` (`lesen|admin`), `mustChangePassword`, `active`, `failedLogins`, `lockedUntil`, createdAt/By, updatedAt/By.
-- **categories / scenarios**: `name`, `color`, `symbol`, `order`, `active`, Metadaten.
-- **facilities**: `name`, `categoryId`, `address{street,zip,city}`, `location` (GeoJSON Point WGS84, 2dsphere),
-  `admin{regbez,kreis,gemeinde,plz5}`, `hazards[]`, `contact{person,function,phone,email}`, `note`, Metadaten.
-  Für Stufe 3 bereits vorgesehen: `externalId` (optional), `normalizedKey` (normalisiert aus Name+PLZ+Straße für Dublettenerkennung, Index), `source` (`manual|import`), `importBatchId`.
-  Indizes: `location` 2dsphere, `categoryId`, `hazards`, `admin.*`, Text-Index auf name/address/city.
-- **boundaries**: `level` (`regbez|kreis|gemeinde|plz2|plz5`), `code`, `name`, `parentCodes`, `geometry` (Polygon/MultiPolygon, 2dsphere), `bbox`, `source`, `license`, `importedAt`.
-- **events**: `name`, `occurredAt`, `geometry`, `bufferMeters`, `bufferGeometry`, `definition` (Typ: polygon|circle|boundary + Parameter), `resultSnapshot{inArea[], inBuffer[], counts, createdAt}`, Metadaten.
-- **audit_log** (zusätzlich, für APP.3.1): Login-Erfolg/-Fehler, Rechteänderungen, Löschungen.
-- **sessions** werden serverseitig in MongoDB gehalten (TTL-Index), Cookie nur mit Session-ID.
+**Entscheidung (Rückmeldung 2026-10-14): MariaDB statt MariaDB.** Zugriff über PDO (`pdo_mysql`), Schema-Migrationen als SQL-Dateien in `backend/migrations/` (Skript `bin/migrate.php`).
+Geodaten als `GEOMETRY`/`POINT` mit Spatial Index (Koordinaten WGS84 lon/lat, planare Berechnung – für NRW ausreichend).
+MariaDB 10.11 hat `ST_Within`, `ST_Intersects`, `ST_Buffer`, aber **kein `ST_Transform`**: Reprojektion WGS84↔EPSG:25832 erfolgt in PHP (eigene UTM-Implementierung, getestet). Der Puffer wird in UTM-Metern per `ST_Buffer` in MariaDB gerechnet und zurückprojiziert – die offene Puffer-Frage entfällt damit.
 
-Seed: 4 Kategorien, 7 Szenarien, ein Admin mit Initialpasswort (zufällig generiert und einmalig in der Konsole ausgegeben, `mustChangePassword=true`). Keine Einrichtungen.
+- **users**: `id`, `username` (unique), `password_hash` (Argon2id), `role` ENUM(`lesen`,`admin`), `must_change_password`, `active`, `failed_logins`, `locked_until`, created_at/by, updated_at/by.
+- **sessions**: `id_hash` (SHA-256 der Cookie-ID), `user_id`, `csrf_token`, `data`, `expires_at`, `created_at`. Eigene Session-Verwaltung statt PHP-Session (testbar, Regeneration nach Login).
+- **categories / scenarios**: `id`, `name`, `color`, `symbol`, `sort_order`, `active`, Metadaten.
+- **facilities**: `id`, `name`, `category_id`, `street`, `zip`, `city`, `location POINT NOT NULL` (SPATIAL INDEX), `regbez`, `kreis`, `gemeinde`, `plz5` (indexiert, per Point-in-Polygon beim Speichern), `contact_person/function/phone/email`, `note`, Metadaten; Stufe 3: `external_id`, `normalized_key` (Index), `source`, `import_batch_id`. FULLTEXT auf name/city.
+- **facility_hazards**: `facility_id`, `scenario_id` (n:m).
+- **boundaries**: `id`, `level` (`regbez|kreis|gemeinde|plz2|plz5`), `code`, `name`, `parent_codes` (JSON), `geom GEOMETRY NOT NULL` (SPATIAL INDEX), `source`, `license`, `imported_at`.
+- **events**: `id`, `name`, `occurred_at`, `geom`, `buffer_m`, `buffer_geom`, `definition` (JSON), `result_snapshot` (JSON), Metadaten.
+- **audit_log**, **rate_limits** (TTL per Cleanup-Job/Abfrage).
+
+Seed: 4 Kategorien, 7 Szenarien, ein Admin (zufälliges Initialpasswort, einmalig in der Konsole, `must_change_password=1`). Keine Einrichtungen.
+
+## 2a. Karten: Offline-first, Quellen austauschbar (Rückmeldung 2026-10-14)
+
+Es kann sein, dass im Betrieb **gar kein Internetzugriff** möglich ist. Deshalb:
+
+- Die Karte läuft **standardmäßig vollständig ohne externe Dienste**. Hintergrund „Politisch“ wird aus den lokal in der Datenbank liegenden Verwaltungsgrenzen gerendert; Einrichtungen, Lagemodus und Druck brauchen kein Netz.
+- Hintergrund „Topografisch“ ist eine **austauschbare Quelle** (`config/basemaps.php`), jeweils mit gleichem Interface im Frontend:
+  `local-tiles` (vorgerenderte XYZ-/MBTiles-Pakete, vom Server ausgeliefert – Standard, sobald ein Paket installiert ist),
+  `wms-proxy` (Geobasis NRW über den PHP-Proxy, nur wenn Netz vorhanden),
+  `none`. Tausch = Konfigurationsänderung, kein Codeumbau.
+- Grenz-Importskript nimmt auch **lokale Dateien** (GeoJSON/Shape/GPKG) statt Download; die Rohdaten werden einmalig außerhalb beschafft und per Datenträger eingespielt.
+- Externe Dienste (Geokodierung, Warnungen, Hochwasser-WMS) sind **optionale Zusatzfunktionen** mit sichtbarem Status „nicht erreichbar“; ohne Netz bleibt alles andere voll nutzbar. Geokodierung offline: manuelles Setzen des Markers.
+- Service Worker bleibt als zweite Schicht (Daten-/Kachel-Cache).
 
 ## 3. API (JSON, Präfix `/api`, CSRF-Token-Header bei allen schreibenden Methoden)
 
@@ -82,7 +97,7 @@ Seed: 4 Kategorien, 7 Szenarien, ein Admin mit Initialpasswort (zufällig generi
 | Einrichtungen | `GET /facilities` (Filter: categoryId, hazard, regbez, kreis, plzPrefix, q, bbox, Paging), `GET /facilities/{id}`, `POST`, `PUT`, `DELETE` | lesen / admin |
 | Hinweise | `POST /facilities/hints` (Stufe 2: GetFeatureInfo/Warngebiete) | admin |
 | Grenzen | `GET /boundaries?level=&bbox=&simplify=`, `GET /boundaries/{level}/{code}` | lesen |
-| Lage | `POST /situation/query` (Geometrie, Puffer → im Gebiet / Pufferzone), `GET/POST/PUT/DELETE /events`, `GET /events/{id}/export.csv` | lesen (Speichern/Löschen: admin) |
+| Lage | `POST /situation/query` (Geometrie, Puffer → im Gebiet / Pufferzone, SQL-Spatial), `GET/POST/PUT/DELETE /events`, `GET /events/{id}/export.csv` | lesen (Speichern/Löschen: admin) |
 | Proxy | `GET /proxy/wms/{layer}` (Allowlist aus `services.php`), `GET /proxy/tiles/{source}/{z}/{x}/{y}`, `GET /geocode?q=` | lesen |
 | Warnungen (St. 2) | `GET /warnings` (aggregiert + Status je Dienst), `GET /warnings/status` | lesen |
 | Benutzer | `GET/POST/PUT/DELETE /users`, `POST /users/{id}/reset-password` | admin |
@@ -93,12 +108,12 @@ Der Proxy akzeptiert nur Schlüssel aus der Konfiguration, niemals frei übergeb
 
 ## 4. Zentrale technische Entscheidungen
 
-- **Sicherheit**: Slim-Middleware-Kette (SecurityHeaders/CSP → Session → CSRF → Auth → Rolle → Validierung). Session-Cookie Secure/HttpOnly/SameSite=Strict, `session_regenerate_id` nach Login, Rate-Limit pro IP+Benutzer (MongoDB-Zähler), Lockout mit Backoff. Eingaben werden nur als Skalare/typisierte Strukturen akzeptiert (Arrays/Objekte mit `$`-Schlüsseln werden abgelehnt), Filter werden serverseitig aus Whitelist-Parametern gebaut. CSP ohne `unsafe-inline`.
+- **Sicherheit**: Slim-Middleware-Kette (SecurityHeaders/CSP → Session → CSRF → Auth → Rolle → Validierung). Session-Cookie Secure/HttpOnly/SameSite=Strict, `session_regenerate_id` nach Login, Rate-Limit pro IP+Benutzer (DB-Zähler), Lockout mit Backoff. Ausschließlich Prepared Statements; Eingaben werden typisiert validiert, Filter/Sortierung nur aus Whitelists gebaut. CSP ohne `unsafe-inline`.
 - **Karte**: OpenLayers mit EPSG:25832 (proj4), Extent auf NRW begrenzt. Hintergrund „Topografisch“ und WMS über Proxy; „Politisch“ aus Grenz-Polygonen (Regierungsbezirksfarben), Vereinfachung je Zoomstufe vom Server. Clustering über `ol/source/Cluster`.
-- **Lagemodus**: Server-Query mit `$geoWithin`/`$geoIntersects` auf `facilities.location`. Pufferzone = Puffergeometrie minus Ereignisgebiet. Puffer wird in EPSG:25832 (metrisch) berechnet und zurück nach WGS84 transformiert.
+- **Lagemodus**: Server-Query mit `ST_Within`/`ST_Intersects` auf `facilities.location` (Spatial Index). Pufferzone = Puffergeometrie minus Ereignisgebiet. Puffer per `ST_Buffer` in EPSG:25832 (metrisch), Projektion in PHP.
 - **Druck/PDF**: Karte wird im Browser in Zielauflösung (≥150 dpi, A2 quer = 3508×2480 px) auf Canvas gerendert (durch den Proxy nicht „tainted“); A4-Kachelung mit Überlappung, Passermarken, Blattschnittübersicht; Kontaktverzeichnis als Folgeseiten.
 - **Offline**: Service Worker (Workbox-frei, eigene schlanke Implementierung): App-Shell, `GET /facilities` (letzter Stand + Zeitstempel), Kartenkacheln (LRU-begrenzt), NRW-Übersicht Zoom 6–9 vorab. Banner nur Lesebetrieb.
-- **Tests**: PHPUnit-Integrationstests gegen MongoDB-Testinstanz für `$geoWithin`/`$geoIntersects`, Puffer, Admin-Zuordnung (Point-in-Polygon), Rollenmatrix (jeder Endpunkt × Rolle × unauthentifiziert), CSRF, Operator-Injection; Vitest für Frontend-Logik.
+- **Tests**: PHPUnit-Integrationstests gegen MariaDB-Testdatenbank für ST_Within/ST_Intersects, Puffer, Projektion, Admin-Zuordnung (Point-in-Polygon), Rollenmatrix (jeder Endpunkt × Rolle × unauthentifiziert), CSRF, SQL-Injection (nur Prepared Statements); Vitest für Frontend-Logik.
 
 ## 5. Phasen
 

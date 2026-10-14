@@ -1,0 +1,10 @@
+backend/vendor/
+backend/storage/cache/*
+backend/storage/logs/*
+backend/storage/tiles/*
+backend/storage/boundaries-download/
+!backend/storage/**/.gitkeep
+frontend/node_modules/
+backend/public/assets/
+.env
+.phpunit.cache/

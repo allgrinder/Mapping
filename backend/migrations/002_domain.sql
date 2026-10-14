@@ -1,0 +1,68 @@
+CREATE TABLE facilities (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  category_id INT UNSIGNED NOT NULL,
+  street VARCHAR(255) NULL,
+  zip VARCHAR(5) NULL,
+  city VARCHAR(120) NULL,
+  location POINT NOT NULL,
+  regbez CHAR(2) NULL,
+  kreis CHAR(5) NULL,
+  gemeinde CHAR(8) NULL,
+  plz5 CHAR(5) NULL,
+  contact_person VARCHAR(160) NULL,
+  contact_function VARCHAR(160) NULL,
+  contact_phone VARCHAR(60) NULL,
+  contact_email VARCHAR(190) NULL,
+  note TEXT NULL,
+  external_id VARCHAR(120) NULL,
+  normalized_key VARCHAR(255) NULL,
+  source ENUM('manual','import') NOT NULL DEFAULT 'manual',
+  import_batch_id VARCHAR(40) NULL,
+  created_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  created_by INT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  updated_by INT UNSIGNED NULL,
+  SPATIAL INDEX sx_facilities_location (location),
+  KEY ix_facilities_category (category_id),
+  KEY ix_facilities_regbez (regbez),
+  KEY ix_facilities_kreis (kreis),
+  KEY ix_facilities_plz5 (plz5),
+  KEY ix_facilities_key (normalized_key),
+  KEY ix_facilities_external (external_id),
+  FULLTEXT KEY ft_facilities (name, city),
+  CONSTRAINT fk_facilities_category FOREIGN KEY (category_id) REFERENCES categories(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE facility_hazards (
+  facility_id INT UNSIGNED NOT NULL,
+  scenario_id INT UNSIGNED NOT NULL,
+  PRIMARY KEY (facility_id, scenario_id),
+  CONSTRAINT fk_fh_facility FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE,
+  CONSTRAINT fk_fh_scenario FOREIGN KEY (scenario_id) REFERENCES scenarios(id)
+) ENGINE=InnoDB DEFAULT CHARSET=ascii;
+CREATE TABLE boundaries (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  level ENUM('regbez','kreis','gemeinde','plz2','plz5') NOT NULL,
+  code VARCHAR(12) NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  parent_codes TEXT NULL,
+  geom GEOMETRY NOT NULL,
+  source VARCHAR(160) NULL,
+  license VARCHAR(80) NULL,
+  imported_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  UNIQUE KEY uq_boundaries (level, code),
+  SPATIAL INDEX sx_boundaries_geom (geom)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE events (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  occurred_at DATETIME NOT NULL,
+  geom GEOMETRY NOT NULL,
+  buffer_m INT UNSIGNED NOT NULL DEFAULT 0,
+  definition LONGTEXT NOT NULL,
+  result_snapshot LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  created_by INT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT UTC_TIMESTAMP(),
+  updated_by INT UNSIGNED NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

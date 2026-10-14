@@ -1,0 +1,37 @@
+# Entwicklungs-Setup: PHP-FPM, nginx, MariaDB.  Start: docker compose up -d --build
+services:
+  php:
+    build:
+      context: ./docker/php
+      args: { PHP_VERSION: "${PHP_VERSION:-8.3}" }
+    volumes: [".:/app"]
+    environment:
+      APP_ENV: development
+      DB_HOST: db
+      DB_NAME: kritis
+      DB_USER: kritis
+      DB_PASS: kritis
+      COOKIE_SECURE: "false"
+      HSTS: "false"
+      OUTBOUND_PROXY: "${OUTBOUND_PROXY:-}"
+    depends_on:
+      db: { condition: service_healthy }
+  web:
+    image: nginx:1.27-alpine
+    ports: ["8080:80"]
+    volumes: [".:/app:ro", "./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro"]
+    depends_on: [php]
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: kritis
+      MARIADB_USER: kritis
+      MARIADB_PASSWORD: kritis
+      MARIADB_ROOT_PASSWORD: root-dev-only
+    volumes: ["dbdata:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20
+volumes:
+  dbdata:
