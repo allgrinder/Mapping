@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Kritis;
 
 use Kritis\Controller\AuthController;
+use Kritis\Controller\MapController;
 use Kritis\Controller\MasterDataController;
+use Kritis\Geo\TileService;
+use Kritis\Support\HttpClient;
 use Kritis\Controller\UserController;
 use Kritis\Http\Middleware\CsrfMiddleware;
 use Kritis\Http\Middleware\ErrorMiddleware;
@@ -41,13 +44,19 @@ final class App
         $store = new SessionStore($db, (int) $config->get('session.idle_ttl'), (int) $config->get('session.absolute_ttl'));
         $auth = new AuthController($db, $config, $hasher, $policy, $limiter, $store);
         $users = new UserController($db, $hasher, $store);
+        $root = dirname(__DIR__, 2);
+        $services = require $root . '/config/services.php';
+        $basemaps = require $root . '/config/basemaps.php';
+        $http = new HttpClient((string) $config->get('outbound_proxy', ''), (int) $services['http']['timeout'], (string) $services['http']['user_agent']);
+        $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http);
+        $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache');
         $master = ['categories' => new MasterDataController($db, 'categories'), 'scenarios' => new MasterDataController($db, 'scenarios')];
 
         $any = fn () => new RequireAuth($db);
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -62,6 +71,10 @@ final class App
             $g->put('/users/{id}', [$users, 'update'])->add($admin());
             $g->delete('/users/{id}', [$users, 'delete'])->add($admin());
             $g->post('/users/{id}/reset-password', [$users, 'resetPassword'])->add($admin());
+
+            $g->get('/map/config', [$map, 'config'])->add($any());
+            $g->get('/boundaries/{level}', [$map, 'boundaries'])->add($any());
+            $g->get('/tiles/{basemap:[a-z0-9_-]+}/{z}/{x}/{y}.png', [$map, 'tile'])->add($any());
 
             foreach ($master as $path => $ctl) {
                 $g->get("/$path", [$ctl, 'list'])->add($any());

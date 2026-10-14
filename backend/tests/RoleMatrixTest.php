@@ -26,6 +26,9 @@ final class RoleMatrixTest extends TestCase
         yield 'scenarios update' => ['PUT', '/api/scenarios/S', ['name' => 'Umbenannt', 'color' => '#112233', 'symbol' => 'wave'], 401, 403, 200];
         yield 'scenarios order' => ['PUT', '/api/scenarios/order', ['ids' => ['S']], 401, 403, 200];
         yield 'scenarios delete' => ['DELETE', '/api/scenarios/S', null, 401, 403, 200];
+        yield 'map config' => ['GET', '/api/map/config', null, 401, 200, 200];
+        yield 'boundaries' => ['GET', '/api/boundaries/kreis', null, 401, 200, 200];
+        yield 'tiles' => ['GET', '/api/tiles/topografisch/0/0/0.png', null, 401, 404, 404];
         yield 'change password' => ['POST', '/api/auth/change-password', ['currentPassword' => 'x', 'newPassword' => 'y'], 401, 422, 422];
     }
 

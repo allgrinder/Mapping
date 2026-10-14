@@ -37,7 +37,7 @@ abstract class TestCase extends Base
     {
         $this->config = Config::load()->with(['session.cookie_secure' => false, 'security.hsts' => false]);
         self::$db->exec('SET FOREIGN_KEY_CHECKS=0');
-        foreach (['sessions', 'rate_limits', 'audit_log', 'facility_hazards', 'facilities', 'boundaries', 'events', 'users', 'categories', 'scenarios'] as $t) {
+        foreach (['sessions', 'rate_limits', 'audit_log', 'boundary_imports', 'facility_hazards', 'facilities', 'boundaries', 'events', 'users', 'categories', 'scenarios'] as $t) {
             self::$db->exec("TRUNCATE TABLE $t");
         }
         self::$db->exec('SET FOREIGN_KEY_CHECKS=1');
