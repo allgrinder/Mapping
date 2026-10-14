@@ -4,6 +4,8 @@ Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUN
 
 **Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Arbeitspaket 4: Einrichtungen anlegen/bearbeiten/löschen mit Adresssuche, verschiebbarem Marker, automatischer Gebietszuordnung, kombinierbaren Filtern, Trefferliste, Clustering und Detailansicht. Arbeitspaket 5: Lagemodus (Fläche zeichnen, Radius um Punkt, Verwaltungs-/PLZ-Gebiet, Pufferzone, Betroffene getrennt nach Gebiet/Puffer, CSV- und PDF-Lageliste, Ereignisse speichern/öffnen). Arbeitspaket 6: Druck des gefilterten Bestands als PDF (DIN A2 ein Blatt oder DIN A4 gestückelt mit Blattschnittübersicht, Überlappung, Passermarken; nummerierte Punkte, Legende, Maßstab, Nordpfeil, Stand, Quellen, Kontaktverzeichnis; 150 dpi). Arbeitspaket 7: Offline-Betrieb über Service Worker (App, letzter Datenstand, zuletzt genutzte Kacheln, NRW-Übersicht vorab; Banner „Offline – Datenstand vom …“, reiner Lesebetrieb).
 
+**Stufe 2:** Hochwassergefahrenkarten NRW als zuschaltbare WMS-Ebene (über Proxy, mit Cache) und Hinweise beim Speichern (GetFeatureInfo HQhäufig/HQ100/HQextrem, aktive Warngebiete, Waldbrandindex – nur Vorschläge); Live-Warnlage aus NINA (MoWaS, DWD) und DWD-Waldbrandgefahrenindex mit periodischem Abruf, Statusanzeige je Dienst und Rückfall auf den letzten Stand bei Ausfall.
+
 ## Demo im Browser (GitHub Pages)
 Bei jedem Push baut `.github/workflows/pages.yml` eine **Demo-Version** und veröffentlicht sie auf GitHub Pages.
 In der Demo läuft statt PHP/MariaDB ein kleiner Ersatz-Server im Browser (`frontend/src/demo/server.js`);
@@ -79,6 +81,15 @@ Ohne Verbindung zeigt die Anwendung „Offline – Datenstand vom …“ und erl
 zwischengespeicherten Daten gelöscht. Voraussetzung: Auslieferung über HTTPS (oder localhost); `sw.js` darf nicht lange gecacht werden
 (siehe `docker/nginx/default.conf`).
 
+## Live-Warnlage und Hochwasser (Stufe 2)
+Quellen und Lizenzen: `config/services.php` (`wms.hochwasser`, `warnings`). Abruf erfolgt nur serverseitig über `OUTBOUND_PROXY`.
+Die Warnlage wird bei Bedarf höchstens alle `WARNINGS_INTERVAL` Sekunden erneuert; alternativ per Cron:
+```
+*/5 * * * * cd /pfad/backend && php bin/refresh-warnings.php
+```
+Fällt ein Dienst aus, bleibt der letzte Stand sichtbar und der Status wird angezeigt. Die Layer der Hochwassergefahrenkarten
+werden aus den GetCapabilities ermittelt (HQhäufig/HQ100/HQextrem); bei Bedarf über `HWGK_LAYER_HQ100` usw. festlegen.
+
 ## Wichtige Umgebungsvariablen
 | Variable | Standard | Bedeutung |
 |---|---|---|
@@ -92,6 +103,9 @@ zwischengespeicherten Daten gelöscht. Voraussetzung: Auslieferung über HTTPS (
 | `BASEMAP_DEFAULT` | politisch | Start-Hintergrund |
 | `GEOCODER_URL` | Nominatim | Adresssuche; `off` = abgeschaltet (Standort per Klick setzen) |
 | `GEOCODER_MIN_INTERVAL_MS` | 1100 | Mindestabstand zwischen Anfragen (Nutzungsbedingungen Nominatim) |
+| `WARNINGS_INTERVAL` | 300 | Abrufintervall Warnlage in Sekunden |
+| `HWGK_WMS_URL` | wms.nrw.de/umwelt/wasser/HW_Gefahrenkarte | Hochwassergefahrenkarten; `off` = abgeschaltet |
+| `NINA_BASE_URL` / `DWD_WBI_URL` | amtliche Endpunkte | Warnquellen |
 
 ## Tests
 Benötigen eine MariaDB mit Datenbank `kritis_test` (Benutzer/Passwort per `DB_USER`/`DB_PASS`, Standard `kritis`/`kritis`):

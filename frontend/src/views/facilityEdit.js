@@ -80,6 +80,36 @@ export async function renderFacilityEdit(root, { id, navigate }) {
       adminGrid.replaceChildren(cell('Regierungsbezirk', r.names.regbez || '–'), cell('Kreis / Stadt', r.names.kreis || '–'), cell('PLZ-Gebiet', r.plz5 || '–'));
       if (r.boundariesLoaded && !r.inNrw) showFieldError('location', 'Der Standort liegt außerhalb von Nordrhein-Westfalen.');
     } catch { adminGrid.replaceChildren(); }
+    loadHints();
+  }
+
+  // Hinweise (Stufe 2): Vorschläge, nie automatische Änderung
+  let hintSeq = 0;
+  const dismissed = new Set();
+  async function loadHints() {
+    const my = ++hintSeq;
+    hints.replaceChildren(h('div', { class: 'cap' }, 'Gefahrenhinweise werden geprüft …'));
+    try {
+      const r = await api('POST', '/facilities/hints', { lon: d.location.lon, lat: d.location.lat });
+      if (my !== hintSeq) return;
+      const list = r.hints.filter((x) => x.scenarioId && !d.hazards.includes(x.scenarioId) && !dismissed.has(x.scenario));
+      hints.replaceChildren(...list.map((x) => {
+        const box = h('div', { class: 'hint pop' + (x.kind === 'flood' ? '' : ' warn'), role: 'status' },
+          h('span', { class: 'hint-sym ' + (x.kind === 'flood' ? 'hatch' : 'warn-sym') }),
+          h('div', { style: { flex: '1' } }, h('div', {}, x.text, ` Szenario „${x.scenario}“ anhaken?`),
+            h('div', { class: 'hint-actions' },
+              h('button', { class: 'btn btn-secondary btn-sm', type: 'button', onClick: () => {
+                d.hazards = [...new Set([...d.hazards, x.scenarioId])];
+                const cb = hazardBoxes.querySelector(`input[data-id="${x.scenarioId}"]`);
+                if (cb) cb.checked = true;
+                box.remove();
+              } }, 'Anhaken'),
+              h('button', { class: 'btn btn-plain btn-sm', type: 'button', style: { color: 'var(--text-2)' }, onClick: () => { dismissed.add(x.scenario); box.remove(); } }, 'Nicht jetzt'))));
+        return box;
+      }), ...(r.status.length ? [h('div', { class: 'cap' }, `Hinweise unvollständig: ${r.status.join(' ')}`)] : []));
+    } catch (e) {
+      if (my === hintSeq) hints.replaceChildren(h('div', { class: 'cap' }, `Gefahrenhinweise nicht verfügbar: ${e.message}`));
+    }
   }
   const cell = (k, v) => h('div', {}, h('div', { class: 'cap' }, k), h('div', { class: 'cell-v' }, v));
 

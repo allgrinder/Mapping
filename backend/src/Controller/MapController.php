@@ -14,7 +14,7 @@ final class MapController
 {
     private const LEVELS = ['land', 'regbez', 'kreis', 'gemeinde', 'plz2', 'plz5'];
 
-    public function __construct(private PDO $db, private array $basemaps, private TileService $tiles, private string $cacheDir)
+    public function __construct(private PDO $db, private array $basemaps, private TileService $tiles, private string $cacheDir, private array $services = [])
     {
     }
 
@@ -37,6 +37,11 @@ final class MapController
             'basemaps' => $bms,
             'boundaries' => array_values($imports),
             'attributions' => $attr,
+            'overlays' => [
+                'flood' => !empty($this->services['wms']['hochwasser']['url']) && $this->services['wms']['hochwasser']['url'] !== 'off',
+                'warnings' => true,
+            ],
+            'warningsIntervalS' => (int) ($this->services['warnings']['interval_s'] ?? 300),
         ]);
     }
 

@@ -5,6 +5,9 @@ namespace Kritis;
 
 use Kritis\Controller\AuthController;
 use Kritis\Controller\FacilityController;
+use Kritis\Controller\HazardController;
+use Kritis\Geo\FloodService;
+use Kritis\Geo\WarningService;
 use Kritis\Controller\GeocodeController;
 use Kritis\Controller\MapController;
 use Kritis\Geo\AdminResolver;
@@ -54,17 +57,19 @@ final class App
         $basemaps = require $root . '/config/basemaps.php';
         $http = new HttpClient((string) $config->get('outbound_proxy', ''), (int) $services['http']['timeout'], (string) $services['http']['user_agent']);
         $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http);
-        $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache');
+        $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache', $services);
         $facilities = new FacilityController($db, new AdminResolver($db));
         $geocode = new GeocodeController($services['geocoding'], $http, $config->get('storage') . '/cache');
         $situation = new SituationController($db, new SituationService($db));
+        $cache = $config->get('storage') . '/cache';
+        $hazards = new HazardController($db, new WarningService($services['warnings'], $http, $cache), new FloodService($services['wms']['hochwasser'], $http, $cache), $services);
         $master = ['categories' => new MasterDataController($db, 'categories'), 'scenarios' => new MasterDataController($db, 'scenarios')];
 
         $any = fn () => new RequireAuth($db);
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $situation, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $situation, $hazards, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -93,6 +98,9 @@ final class App
             $g->get('/geocode', [$geocode, 'search'])->add($admin());
 
             $g->post('/situation/query', [$situation, 'query'])->add($any());
+            $g->get('/warnings', [$hazards, 'warnings'])->add($any());
+            $g->get('/wms/hochwasser', [$hazards, 'floodMap'])->add($any());
+            $g->post('/facilities/hints', [$hazards, 'hints'])->add($admin());
             $g->get('/events', [$situation, 'list'])->add($any());
             $g->post('/events', [$situation, 'create'])->add($any());
             $g->get('/events/{id:[0-9]+}', [$situation, 'get'])->add($any());

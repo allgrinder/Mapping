@@ -6,6 +6,9 @@ import VectorSource from 'ol/source/Vector.js';
 import TileLayer from 'ol/layer/Tile.js';
 import TileImage from 'ol/source/TileImage.js';
 import TileGrid from 'ol/tilegrid/TileGrid.js';
+import ImageLayer from 'ol/layer/Image.js';
+import ImageWMS from 'ol/source/ImageWMS.js';
+import { Fill, Stroke, Style } from 'ol/style.js';
 import GeoJSON from 'ol/format/GeoJSON.js';
 import ScaleLine from 'ol/control/ScaleLine.js';
 import { defaults as defaultInteractions } from 'ol/interaction/defaults.js';
@@ -22,7 +25,11 @@ export const OVERLAYS = [
   { id: 'kreis', label: 'Kreisgrenzen', sub: 'Kreise und kreisfreie Städte', on: false },
   { id: 'plz2', label: 'PLZ-Gebiete (2-stellig)', sub: 'Leitregionen', on: false },
   { id: 'plz5', label: 'PLZ-Gebiete (5-stellig)', sub: 'Sichtbar ab Maßstab 1:100.000', on: false, maxResolution: RES_1_100000 },
+  { id: 'flood', label: 'Hochwassergefahrenkarten', sub: 'HQhäufig, HQ100, HQextrem (LANUK NRW)', on: false, service: true },
+  { id: 'warn', label: 'Live-Warnungen', sub: 'MoWaS und DWD', on: true, service: true },
 ];
+
+const warnStyle = new Style({ fill: new Fill({ color: 'rgba(234,120,20,.2)' }), stroke: new Stroke({ color: '#E07812', width: 1.5, lineDash: [6, 4] }) });
 
 export async function createMap(target, cfg, { onScale, fitPadding } = {}) {
   const projection = utmProjection(cfg.grid.extent);
@@ -56,6 +63,19 @@ export async function createMap(target, cfg, { onScale, fitPadding } = {}) {
     land: vector('land', S.landStyle(c), { zIndex: 30 }),
   };
 
+  layers.warn = new VectorLayer({ source: new VectorSource(), style: warnStyle, zIndex: 25 });
+  if (cfg.overlays?.flood) {
+    layers.flood = new ImageLayer({
+      zIndex: 15, visible: false, opacity: 0.75,
+      source: new ImageWMS({
+        url: '/api/wms/hochwasser', params: {}, projection, ratio: 1.2,
+        imageLoadFunction: (image, src) => {
+          const u = new URL(src, location.href);
+          image.getImage().src = `/api/wms/hochwasser?bbox=${u.searchParams.get('BBOX')}&width=${u.searchParams.get('WIDTH')}&height=${u.searchParams.get('HEIGHT')}`;
+        },
+      }),
+    });
+  }
   const topo = cfg.basemaps.find((b) => b.id === 'topografisch' && b.type === 'tiles');
   if (topo) {
     const g = cfg.grid;
@@ -110,6 +130,12 @@ export async function createMap(target, cfg, { onScale, fitPadding } = {}) {
       layers.topografisch?.setVisible(id === 'topografisch');
     },
     setOverlay(id, on) { layers[id]?.setVisible(on); },
+    /** Warngebiete (GeoJSON WGS84) anzeigen */
+    setWarnings(list) {
+      const src = layers.warn.getSource();
+      src.clear();
+      src.addFeatures((list || []).filter((w) => w.geometry).map((w) => { const f = geojson.readFeature({ type: 'Feature', geometry: w.geometry, properties: { title: w.title } }); f.setId(w.id); return f; }));
+    },
     /** Nach Themewechsel neu einfärben (Canvas kennt keine CSS-Variablen). */
     restyle() {
       c = S.themeColors();

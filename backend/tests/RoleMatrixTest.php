@@ -40,6 +40,8 @@ final class RoleMatrixTest extends TestCase
         yield 'events list' => ['GET', '/api/events', null, 401, 200, 200];
         yield 'events create (ungültig)' => ['POST', '/api/events', ['name' => 'x'], 401, 422, 422];
         yield 'event delete (fehlt)' => ['DELETE', '/api/events/999999', null, 401, 403, 404];
+        yield 'hints (ungültig)' => ['POST', '/api/facilities/hints', ['lon' => 'x'], 401, 403, 422];
+        yield 'wms hochwasser (ungültig)' => ['GET', '/api/wms/hochwasser?bbox=1,2,3', null, 401, 422, 422];
         yield 'change password' => ['POST', '/api/auth/change-password', ['currentPassword' => 'x', 'newPassword' => 'y'], 401, 422, 422];
     }
 

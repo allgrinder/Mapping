@@ -11,6 +11,7 @@ import { renderMapPage } from './views/mapPage.js';
 import { renderFacilityEdit } from './views/facilityEdit.js';
 import { renderSituation } from './views/situation.js';
 import { renderPrintDialog } from './views/printDialog.js';
+import { renderWarnlage } from './views/warnlage.js';
 import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
 import { registerServiceWorker, warmup, clearOfflineData } from './ui/offline.js';
 import './styles/map.css';
@@ -81,6 +82,9 @@ async function route() {
       return cleanup;
     case 'lage':
       cleanup = await renderSituation(root, { me, eventId: sub ? Number(sub) : null, navigate });
+      return cleanup;
+    case 'warnlage':
+      cleanup = await renderWarnlage(root, { navigate });
       return cleanup;
     case 'druck':
       return renderPrintDialog(root, { navigate });

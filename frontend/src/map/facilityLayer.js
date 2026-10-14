@@ -4,7 +4,7 @@ import Cluster from 'ol/source/Cluster.js';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { fromLonLat } from 'ol/proj.js';
-import { Icon, Style } from 'ol/style.js';
+import { Icon, Style, Circle as CircleStyle, Stroke, Fill } from 'ol/style.js';
 import { SYMBOLS } from '../ui/icons.js';
 import { UTM } from './projection.js';
 import { affectedMarkerSvg } from './markers.js';
@@ -77,6 +77,8 @@ export function createFacilityLayer(map, { categories, onSelect, colors, cluster
   const source = new VectorSource();
   const cluster = new Cluster({ source, distance: useCluster ? 44 : 0, minDistance: useCluster ? 16 : 0 });
   let highlight = null;
+  let warned = new Set();
+  const warnRing = new Style({ image: new CircleStyle({ radius: 19, fill: new Fill({ color: 'rgba(194,81,10,.12)' }), stroke: new Stroke({ color: '#C2510A', width: 2.5 }) }), zIndex: 0 });
   const hlCache = new Map();
   let selectedId = null;
   let theme = colors();
@@ -95,9 +97,11 @@ export function createFacilityLayer(map, { categories, onSelect, colors, cluster
           if (!hlCache.has(key)) hlCache.set(key, new Style({ image: new Icon({ src: affectedMarkerSvg(cat?.color || '#5B6472', cat?.symbol, hl.zone, hl.num), anchor: [17, 23], anchorXUnits: 'pixels', anchorYUnits: 'pixels' }), zIndex: hl.zone === 'A' ? 30 : 20 }));
           return hlCache.get(key);
         }
-        return markerStyle(cat, m.getId() === selectedId, false);
+        const base = markerStyle(cat, m.getId() === selectedId, false);
+        return warned.has(m.getId()) ? [warnRing, base] : base;
       }
-      return clusterStyle(members, catById, theme.surface, theme.text);
+      const cs = clusterStyle(members, catById, theme.surface, theme.text);
+      return members.some((m) => warned.has(m.getId())) ? [new Style({ image: new CircleStyle({ radius: 30, stroke: new Stroke({ color: '#C2510A', width: 2.5 }) }) }), cs] : cs;
     },
   });
   map.addLayer(layer);
@@ -132,6 +136,7 @@ export function createFacilityLayer(map, { categories, onSelect, colors, cluster
     select(id) { selectedId = id; layer.changed(); },
     /** @param {Map<number,{zone:'A'|'B',num:number}>|null} m */
     setHighlight(m) { highlight = m; layer.changed(); },
+    setWarned(ids) { warned = new Set(ids); layer.changed(); },
     layer,
     restyle() { theme = colors(); layer.changed(); },
     centerOn(it, minRes = 40) {

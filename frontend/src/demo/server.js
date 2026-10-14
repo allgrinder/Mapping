@@ -193,10 +193,15 @@ export async function handle(method, path, body) {
         ],
         boundaries: Object.entries(levels).map(([level, count]) => ({ level, count, source: meta.source, license: meta.license, attribution: meta.attribution, importedAt: meta.generatedAt })),
         attributions: meta ? [meta.attribution] : [],
+        overlays: { flood: false, warnings: true },
+        warningsIntervalS: 300,
       };
     }
-    case 'facilities': return facilities(method, rest, body);
+    case 'facilities':
+      if (rest === 'hints') { requireUser('admin'); return demoHints(body); }
+      return facilities(method, rest, body);
     case 'situation': requireUser(); return situation(body?.definition, body?.bufferM ?? 0);
+    case 'warnings': requireUser(); return demoWarnings();
     case 'events': return events(method, rest, body);
     case 'geo':
       requireUser();
@@ -373,4 +378,55 @@ async function events(method, rest, body) {
   if (method === 'PUT') { await store(e); save(); return present(e); }
   if (method === 'DELETE') { requireUser('admin'); db.events = db.events.filter((x) => x !== e); save(); return { ok: true }; }
   return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
+}
+
+// ---------------- Live-Warnlage (Demo: direkter Abruf, falls der Browser darf) ----------------
+const NINA = 'https://warnung.bund.de/api31';
+let warnCache = null;
+async function demoWarnings() {
+  if (warnCache && Date.now() - warnCache.t < 300000) return warnCache.d;
+  const sources = [];
+  const warnings = [];
+  const nrw = [5.85, 50.32, 9.47, 52.54];
+  for (const [id, label] of [['mowas', 'Bevölkerungswarnungen (MoWaS)'], ['dwd', 'Unwetterwarnungen (DWD)']]) {
+    try {
+      const list = await (await fetch(`${NINA}/${id}/mapData.json`)).json();
+      let n = 0;
+      for (const it of list.slice(0, 80)) {
+        const geo = await (await fetch(`${NINA}/warnings/${encodeURIComponent(it.id)}.geojson`)).json();
+        const polys = [];
+        for (const f of geo.features || []) {
+          if (f.geometry?.type === 'Polygon') polys.push(f.geometry.coordinates);
+          if (f.geometry?.type === 'MultiPolygon') polys.push(...f.geometry.coordinates);
+        }
+        if (!polys.length) continue;
+        const pts = polys.flat(2);
+        const bb = pts.reduce((a, p) => [Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[2], p[0]), Math.max(a[3], p[1])], [180, 90, -180, -90]);
+        if (bb[0] > nrw[2] || bb[2] < nrw[0] || bb[1] > nrw[3] || bb[3] < nrw[1]) continue;
+        warnings.push({ id: it.id, source: id, title: it.i18nTitle?.de || 'Warnung', severity: it.severity || '', start: it.startDate || null, end: it.expiresDate || null, geometry: { type: 'MultiPolygon', coordinates: polys } });
+        n++;
+      }
+      sources.push({ id, label, status: 'ok', fetchedAt: now(), count: n });
+    } catch (e) {
+      sources.push({ id, label, status: 'error', error: 'Dienst aus dem Browser nicht erreichbar (in der Demo kein Server-Proxy)', fetchedAt: null, count: 0 });
+    }
+  }
+  sources.push({ id: 'wbi', label: 'Waldbrandgefahrenindex (DWD)', status: 'error', error: 'In der Demo nicht verfügbar (Abruf nur über den Server)', fetchedAt: null, count: 0 });
+  const d = { checkedAt: now(), intervalS: 300, sources, warnings, wbi: null, attribution: ['Warnungen: BBK (MoWaS) · Deutscher Wetterdienst'] };
+  warnCache = { t: Date.now(), d };
+  return d;
+}
+
+async function demoHints(b) {
+  const d = await demoWarnings();
+  const hints = [];
+  for (const w of d.warnings) {
+    if (pointInGeometry([b.lon, b.lat], w.geometry)) {
+      const map = [['Hochwasser', /hochwasser|flut/i], ['Starkregen', /regen/i], ['Sturm', /sturm|orkan|wind|böen/i], ['Waldbrand', /brand/i], ['Gefahrstoffunfall', /gefahrstoff|chemie|rauch|gas/i]];
+      const hit = map.find(([, re]) => re.test(w.title));
+      const sc = hit && db.scenarios.find((s) => s.name === hit[0]);
+      if (sc) hints.push({ scenarioId: sc.id, scenario: sc.name, text: `Der Standort liegt in einem aktuellen Warngebiet (${w.title}).`, source: w.source, kind: 'warning' });
+    }
+  }
+  return { hints, status: ['Hochwassergefahrenkarten sind in der Demo nicht verfügbar.', ...d.sources.filter((s) => s.status !== 'ok').map((s) => `${s.label}: nicht erreichbar.`)] };
 }

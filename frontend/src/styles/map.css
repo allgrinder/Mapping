@@ -288,3 +288,49 @@ input[type=range] { width: 100%; accent-color: var(--event); }
 .pv-thumb .port { width: 30px; height: 42px; }
 .pv-thumb .land { width: 42px; height: 30px; }
 .print-progress:empty { display: none; }
+
+/* Warnlage in der Werkzeugleiste */
+.warn-pill { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px 0 14px; border-radius: 16px; text-decoration: none; color: var(--text); }
+.warn-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--text-3); flex: none; }
+.warn-dot.active { background: var(--event); }
+.warn-dot.active::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--event); animation: kl-pulse 1.8s ease-out infinite; }
+.warn-dot.down { background: var(--danger); }
+.warn-text { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.warn-tags { display: flex; gap: 6px; }
+.warn-tags .tag { gap: 5px; color: var(--text); }
+.t-pop { background: rgba(124,58,237,.14); }
+.t-wx { background: rgba(234,120,20,.16); }
+.t-fire { background: rgba(214,48,40,.14); }
+.warn-degraded { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 12px; font-weight: 800; }
+@keyframes kl-pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.7); opacity: 0; } }
+.legend-hatch { width: 18px; height: 12px; border-radius: 3px; background: repeating-linear-gradient(45deg, rgba(37,110,220,.55) 0 2px, rgba(37,110,220,.12) 2px 6px); flex: none; }
+.legend-warn { width: 18px; height: 12px; border-radius: 3px; background: rgba(234,120,20,.2); border: 1.5px dashed #E07812; flex: none; }
+
+/* Live-Warnlage */
+.wl-only { display: flex; align-items: center; gap: 12px; margin: 0 18px 14px; padding: 12px 14px; border-radius: 14px; background: var(--fill); }
+.wl-warn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--event); }
+.wl-wdot { width: 8px; height: 8px; border-radius: 50%; background: var(--event); flex: none; }
+a.hit { text-decoration: none; }
+.wl-panel { position: absolute; right: 16px; top: 16px; width: 392px; max-height: calc(100% - 32px); display: flex; flex-direction: column; overflow: hidden; z-index: 12; }
+.wl-head { display: flex; align-items: center; gap: 12px; padding: 16px 16px 12px 20px; }
+.wl-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.wl-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0 16px 14px; }
+.wl-tile { padding: 10px 12px; border-radius: 12px; }
+.wl-n { font-size: 20px; font-weight: 700; }
+.wl-of { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.wl-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.wl-list { display: flex; flex-direction: column; gap: 8px; }
+.wl-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-family: inherit; text-align: left; cursor: pointer; width: 100%; }
+.wl-item.on { border-color: var(--event); box-shadow: 0 0 0 3px var(--event-weak); }
+.wl-item.static { cursor: default; }
+.wic { flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--text); }
+.wl-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wl-kind { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.wl-wtitle { font-size: 14px; font-weight: 700; line-height: 1.3; }
+.wl-aff { display: inline-flex; align-self: flex-start; align-items: center; margin-top: 4px; height: 24px; padding: 0 9px; border-radius: 7px; background: var(--event-weak); color: var(--event); font-size: 12px; font-weight: 700; }
+.wl-sources { display: flex; flex-direction: column; gap: 6px; }
+.wl-src { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.wl-sdot { width: 8px; height: 8px; border-radius: 50%; }
+.wl-sdot.ok { background: var(--ok); }
+.wl-sdot.err { background: var(--danger); }
+.wl-note { line-height: 1.5; }

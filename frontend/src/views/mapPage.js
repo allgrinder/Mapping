@@ -7,6 +7,7 @@ import { createMap, OVERLAYS } from '../map/mapView.js';
 import { createFacilityLayer } from '../map/facilityLayer.js';
 import { applyFilters, isFiltered, formatAddress, formatCoord } from '../facilities.js';
 import { themeColors } from '../map/styles.js';
+import { startPolling, affected, countBySource, fmtTime } from '../warnings.js';
 
 const chevron = () => svg(UI.down, { size: 14, stroke: 2.4 });
 
@@ -144,7 +145,8 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
   const toggleMenu = (open = menu.hidden) => { menu.hidden = !open; avatar.setAttribute('aria-expanded', String(open)); };
   avatar.addEventListener('click', () => toggleMenu());
 
-  const toolbar = h('div', { class: 'ctl toolbar' },
+  const warnPill = h('a', { class: 'glass warn-pill', href: '#/warnlage', 'aria-label': 'Live-Warnlage öffnen' }, h('span', { class: 'warn-dot idle' }), h('span', { class: 'warn-text' }, 'Warnlage wird geladen …'));
+  const toolbar = h('div', { class: 'ctl toolbar' }, warnPill,
     h('div', { class: 'glass tool-group' },
       h('button', { class: 'btn btn-event', type: 'button', onClick: () => navigate('#/lage') }, svg(UI.situation, { size: 16, stroke: 2.2 }), 'Lagemodus'),
       h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Drucken', title: 'Drucken', onClick: () => navigate('#/druck') }, svg(UI.print)),
@@ -171,8 +173,11 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
     return btn;
   });
   const imported = new Set(cfg.boundaries.map((b) => b.level));
+  let warnSub = null;
+  const legendFlood = h('div', { class: 'legend-row', hidden: true }, h('span', { class: 'legend-hatch' }), h('span', {}, 'Hochwassergefahrenfläche'));
+  const legendWarn = h('div', { class: 'legend-row' }, h('span', { class: 'legend-warn' }), h('span', {}, 'Amtliches Warngebiet'));
   const layerRows = OVERLAYS.map((o) => {
-    const has = imported.has(o.id);
+    const has = o.service ? (o.id === 'flood' ? Boolean(cfg.overlays?.flood) : true) : imported.has(o.id);
     const sw = h('button', { class: 'sw', type: 'button', role: 'switch', 'aria-checked': String(state.overlays[o.id] && has), 'aria-label': o.label, disabled: !has });
     sw.addEventListener('click', () => {
       state.overlays[o.id] = !state.overlays[o.id];
@@ -180,7 +185,10 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
       map.setOverlay(o.id, state.overlays[o.id]);
     });
     map.setOverlay(o.id, state.overlays[o.id] && has);
-    return h('div', { class: 'layer-row' }, h('div', { style: { flex: '1', 'min-width': '0' } }, h('div', { class: 't' }, o.label), h('div', { class: 'cap' }, has ? o.sub : 'Noch nicht importiert')), sw);
+    const sub = h('div', { class: 'cap' }, has ? o.sub : o.service ? 'Dienst nicht eingerichtet' : 'Noch nicht importiert');
+    if (o.id === 'warn') warnSub = sub;
+    sw.addEventListener('click', () => { legendFlood.hidden = !state.overlays.flood; legendWarn.hidden = !state.overlays.warn; });
+    return h('div', { class: 'layer-row' }, h('div', { style: { flex: '1', 'min-width': '0' } }, h('div', { class: 't' }, o.label), sub), sw);
   });
   const panel = h('div', { class: 'glass layer-panel pop', role: 'dialog', 'aria-label': 'Ebenen', hidden: true },
     h('div', { class: 'panel-head' }, 'Ebenen', h('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Schließen', style: { width: '32px', height: '32px' }, onClick: () => togglePanel(false) }, svg(UI.close, { size: 16, stroke: 2.2 }))),
@@ -195,7 +203,8 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
   const legendBody = h('div', { class: 'legend-body' },
     categories.map((c) => h('div', { class: 'legend-row' }, h('span', { class: 'dot', style: { background: c.color } }), h('span', { style: { flex: '1' } }, c.name), legendCounts[c.id] = h('span', { class: 'cap n' }, '0'))),
     h('div', { class: 'legend-row' }, h('span', { class: 'legend-bundle', style: { background: `conic-gradient(${bundleGradient(categories)})` } }, h('span')), h('span', {}, 'Bündel mit Anzahl')),
-    h('div', { class: 'legend-row' }, h('span', { class: 'legend-line' }), h('span', {}, 'Grenze Regierungsbezirk')));
+    h('div', { class: 'legend-row' }, h('span', { class: 'legend-line' }), h('span', {}, 'Grenze Regierungsbezirk')),
+    legendFlood, legendWarn);
   const legendBtn = h('button', { class: 'legend-toggle', type: 'button', 'aria-expanded': 'true' }, 'Legende', svg(UI.up, { size: 14, stroke: 2.4 }));
   legendBtn.addEventListener('click', () => { legendBody.hidden = !legendBody.hidden; legendBtn.setAttribute('aria-expanded', String(!legendBody.hidden)); });
   const legend = h('div', { class: 'glass ctl legend' }, legendBtn, legendBody);
@@ -316,6 +325,34 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
     navigate('#/karte');
   }
 
+  let warnedIds = [];
+  const stopWarnings = startPolling((d, err) => {
+    if (!d) {
+      warnPill.replaceChildren(h('span', { class: 'warn-dot down' }), h('span', { class: 'warn-text' }, 'Warnlage nicht verfügbar'));
+      return;
+    }
+    const c = countBySource(d);
+    const total = d.warnings.length;
+    const down = d.sources.filter((x) => x.status !== 'ok');
+    map.setWarnings(d.warnings);
+    const aff = affected(all, d);
+    warnedIds = [...aff.keys()];
+    facLayer.setWarned(warnedIds);
+    const wbi = d.wbi?.max;
+    const allDown = down.length === d.sources.length;
+    const tags = allDown ? [] : [
+      h('span', { class: 'tag t-pop', title: 'Bevölkerungswarnungen (MoWaS)' }, svg(UI.megaphone, { size: 12, stroke: 2.4 }), String(c.mowas)),
+      h('span', { class: 'tag t-wx', title: 'Unwetterwarnungen (DWD)' }, svg(UI.cloud, { size: 12, stroke: 2.4 }), String(c.dwd)),
+      ...(wbi ? [h('span', { class: 'tag t-fire', title: 'Waldbrandgefahrenindex, höchste Stufe in NRW' }, svg(UI.flame, { size: 12, stroke: 2.4 }), `WBI ${wbi}`)] : []),
+    ];
+    warnPill.replaceChildren(
+      h('span', { class: 'warn-dot ' + (allDown ? 'down' : total ? 'active' : 'idle') }),
+      h('span', { class: 'warn-text' }, allDown ? 'Warndienste nicht erreichbar' : `${total} aktive ${total === 1 ? 'Warnung' : 'Warnungen'}`),
+      ...(tags.length ? [h('span', { class: 'warn-tags' }, tags)] : []),
+      ...(down.length && !allDown ? [h('span', { class: 'warn-degraded', title: down.map((x) => `${x.label}: ${x.error || 'nicht erreichbar'}`).join('\n') }, '!')] : []));
+    if (warnSub) warnSub.textContent = `${total} aktiv · aktualisiert ${fmtTime(d.checkedAt)} Uhr${down.length ? ` · ${down.length} Dienst(e) gestört` : ''}`;
+  }, cfg.warningsIntervalS || 300);
+
   page.append(sidebar, empty, toolbar, menu, zoomCtl, panel, legend, attribution, sheet);
   refresh();
   if (selectId) selectFacility(selectId, true);
@@ -326,6 +363,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
   document.addEventListener('click', onDoc);
 
   return () => {
+    stopWarnings();
     offTheme();
     document.removeEventListener('keydown', onKey);
     document.removeEventListener('click', onDoc);

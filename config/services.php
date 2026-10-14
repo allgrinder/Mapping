@@ -43,7 +43,23 @@ return [
             'attribution' => '© Geobasis NRW, © BKG',
             'verified' => true,
         ],
-        // Stufe 2: Hochwassergefahrenkarten – URL wird bei Umsetzung recherchiert.
+        'hochwasser' => [
+            'label' => 'WMS Hochwasser-Gefahrenkarte NRW (LANUK)',
+            'url' => $env('HWGK_WMS_URL', 'https://www.wms.nrw.de/umwelt/wasser/HW_Gefahrenkarte'),
+            'capabilities' => 'https://www.wms.nrw.de/umwelt/wasser/HW_Gefahrenkarte?REQUEST=GetCapabilities&SERVICE=WMS',
+            'version' => '1.3.0',
+            // Layernamen werden aus den GetCapabilities ermittelt (Titel mit HQ100/HQhäufig/HQextrem);
+            // per Umgebungsvariable überschreibbar, z. B. HWGK_LAYER_HQ100=…
+            'layers' => [
+                'hq_haeufig' => $env('HWGK_LAYER_HQHAEUFIG', ''),
+                'hq100' => $env('HWGK_LAYER_HQ100', ''),
+                'hq_extrem' => $env('HWGK_LAYER_HQEXTREM', ''),
+            ],
+            'license' => 'dl-de/zero-2.0',
+            'attribution' => '© LANUK NRW (Hochwassergefahrenkarten)',
+            'verified' => true,
+            'note' => 'Quelle: Geodatenkatalog/INSPIRE-Metadaten „WMS Hochwasser-Gefahrenkarte NRW“. Alternativ-URL laut Metadaten: …/umwelt/HW_Gefahrenkarte',
+        ],
     ],
     'geocoding' => [
         // Anbieter austauschbar; leer lassen (GEOCODER_URL=off), wenn kein Internetzugang besteht – dann Marker per Klick setzen.
@@ -58,7 +74,26 @@ return [
         'verified' => true,
     ],
     'warnings' => [
-        // Stufe 2: NINA/MoWaS, DWD
+        'interval_s' => (int) $env('WARNINGS_INTERVAL', 300),
+        'nina' => [
+            // OpenAPI: https://github.com/bundesAPI/nina-api (Server https://warnung.bund.de/api31)
+            'base' => $env('NINA_BASE_URL', 'https://warnung.bund.de/api31'),
+            'feeds' => ['mowas' => '/mowas/mapData.json', 'dwd' => '/dwd/mapData.json'],
+            'geojson' => '/warnings/{id}.geojson',
+            'license' => 'Nutzungsbedingungen BBK/NINA; DWD-Warnungen © Deutscher Wetterdienst',
+            'attribution' => 'Warnungen: BBK (MoWaS) · Deutscher Wetterdienst',
+            'max_details' => 300,
+            'verified' => true,
+        ],
+        'wbi' => [
+            // Stationsliste *_stations_list.txt (Latin-1, „;“) und je Station *_recent_<id>_v*.csv.gz mit 7-Tage-Prognose
+            'base' => $env('DWD_WBI_URL', 'https://opendata.dwd.de/climate_environment/CDC/derived_germany/fire_danger_index/woodland/forecast/recent/'),
+            'state' => 'Nordrhein-Westfalen',
+            'license' => 'CC BY 4.0 (Deutscher Wetterdienst)',
+            'attribution' => 'Waldbrandgefahrenindex: Deutscher Wetterdienst',
+            'radius_km' => 30,
+            'verified' => true,
+        ],
     ],
     'http' => [
         'timeout' => (int) $env('HTTP_TIMEOUT', 10),
