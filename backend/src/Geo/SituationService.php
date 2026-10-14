@@ -17,6 +17,7 @@ final class SituationService
     public const MAX_VERTICES = 1000;
     public const MAX_BUFFER_M = 50000;
     public const MAX_RADIUS_M = 100000;
+    public const MAX_AREAS = 60;
     private const LEVELS = ['regbez', 'kreis', 'gemeinde', 'plz2', 'plz5'];
 
     public function __construct(private PDO $db)
@@ -67,18 +68,48 @@ final class SituationService
                 }
                 return ['definition' => ['type' => 'circle', 'center' => [$lon, $lat], 'radiusM' => (float) $r], 'area' => ['type' => 'Polygon', 'coordinates' => [$ring]], 'label' => sprintf('Radius %s km', rtrim(rtrim(number_format($r / 1000, 1, ',', ''), '0'), ','))];
             case 'boundary':
+                // ein oder mehrere Gebiete derselben Ebene; mehrere werden zu einem Ereignisgebiet vereinigt
                 $level = $def['level'] ?? null;
-                $code = $def['code'] ?? null;
-                if (!in_array($level, self::LEVELS, true) || !is_string($code) || !preg_match('/^\d{2,8}$/', $code)) {
+                $codes = $def['codes'] ?? (isset($def['code']) ? [$def['code']] : null);
+                if (!in_array($level, self::LEVELS, true) || !is_array($codes) || !array_is_list($codes) || $codes === []
+                    || count($codes) > self::MAX_AREAS || array_filter($codes, fn ($c) => !is_string($c) || !preg_match('/^\d{2,8}$/', $c))) {
                     throw $this->invalid('definition', 'Bitte ein Gebiet auswählen.');
                 }
-                $st = $this->db->prepare('SELECT name, ST_AsGeoJSON(geom, 7) AS g FROM boundaries WHERE level = ? AND code = ?');
-                $st->execute([$level, $code]);
-                $row = $st->fetch() ?: throw $this->invalid('definition', 'Das gewählte Gebiet ist nicht vorhanden.');
-                $label = ['regbez' => 'Regierungsbezirk', 'kreis' => 'Kreis/Stadt', 'gemeinde' => 'Gemeinde', 'plz2' => 'PLZ-Region', 'plz5' => 'PLZ'][$level];
-                return ['definition' => ['type' => 'boundary', 'level' => $level, 'code' => $code], 'area' => json_decode($row['g'], true), 'label' => "$label {$row['name']}"];
+                $codes = array_values(array_unique($codes));
+                $st = $this->db->prepare('SELECT code, name FROM boundaries WHERE level = ? AND code IN (' . implode(',', array_fill(0, count($codes), '?')) . ')');
+                $st->execute([$level, ...$codes]);
+                $names = array_column($st->fetchAll(), 'name', 'code');
+                if (count($names) !== count($codes)) {
+                    throw $this->invalid('definition', 'Das gewählte Gebiet ist nicht vorhanden.');
+                }
+                $geom = $this->unionBoundaries($level, $codes);
+                $label = ['regbez' => ['Regierungsbezirk', 'Regierungsbezirke'], 'kreis' => ['Kreis/Stadt', 'Kreise/Städte'], 'gemeinde' => ['Gemeinde', 'Gemeinden'], 'plz2' => ['PLZ-Region', 'PLZ-Regionen'], 'plz5' => ['PLZ', 'PLZ-Gebiete']][$level];
+                $list = array_map(fn ($c) => $names[$c], $codes);
+                $text = count($list) === 1 ? "{$label[0]} {$list[0]}"
+                    : $label[1] . ' ' . (count($list) <= 4 ? implode(', ', $list) : implode(', ', array_slice($list, 0, 3)) . ' und ' . (count($list) - 3) . ' weitere');
+                $norm = count($codes) === 1 ? ['type' => 'boundary', 'level' => $level, 'code' => $codes[0]] : ['type' => 'boundary', 'level' => $level, 'codes' => $codes];
+                return ['definition' => $norm, 'area' => $geom, 'label' => $text];
         }
         throw $this->invalid('definition', 'Unbekannter Gebietstyp.');
+    }
+
+    /** Vereinigt Gebietsflächen in der Datenbank (ST_Union paarweise; gemeinsame Grenzen entfallen). @return array GeoJSON */
+    private function unionBoundaries(string $level, array $codes): array
+    {
+        $one = $this->db->prepare('SELECT ST_AsWKB(geom) FROM boundaries WHERE level = ? AND code = ?');
+        $union = $this->db->prepare('SELECT ST_AsWKB(ST_Union(ST_GeomFromWKB(UNHEX(?)), geom)) FROM boundaries WHERE level = ? AND code = ?');
+        $one->execute([$level, $codes[0]]);
+        $acc = $one->fetchColumn();
+        foreach (array_slice($codes, 1) as $c) {
+            $union->execute([bin2hex($acc), $level, $c]);
+            $next = $union->fetchColumn();
+            if ($next) {
+                $acc = $next;
+            }
+        }
+        $st = $this->db->prepare('SELECT ST_AsGeoJSON(ST_GeomFromWKB(UNHEX(?)), 7)');
+        $st->execute([bin2hex((string) $acc)]);
+        return json_decode((string) $st->fetchColumn(), true);
     }
 
     /** Puffer in Metern um ein WGS84-Gebiet; liefert das gepufferte Gebiet (inkl. Ursprungsfläche). */

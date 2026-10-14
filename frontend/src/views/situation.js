@@ -33,6 +33,7 @@ export async function renderSituation(root, { me, eventId, navigate }) {
     regbez: rb.features.map((f) => f.properties).sort((a, b) => a.name.localeCompare(b.name, 'de')),
     kreis: kr.features.map((f) => f.properties).sort((a, b) => a.name.localeCompare(b.name, 'de')),
     plz5: null,
+    gemeinde: null,
   };
   const levelsLoaded = new Set(cfg.boundaries.map((b) => b.level));
 
@@ -45,7 +46,7 @@ export async function renderSituation(root, { me, eventId, navigate }) {
     center: ev?.definition.type === 'circle' ? ev.definition.center : null,
     radiusKm: ev?.definition.type === 'circle' ? ev.definition.radiusM / 1000 : 5,
     level: ev?.definition.type === 'boundary' ? ev.definition.level : 'kreis',
-    code: ev?.definition.type === 'boundary' ? ev.definition.code : '',
+    codes: ev?.definition.type === 'boundary' ? (ev.definition.codes ?? [ev.definition.code]) : [],
     bufferOn: ev ? ev.bufferM > 0 : true,
     bufferKm: ev?.bufferM > 0 ? ev.bufferM / 1000 : 2,
     scenarioId: ev?.scenarioId ?? null,
@@ -92,11 +93,12 @@ export async function renderSituation(root, { me, eventId, navigate }) {
     if (st.tool === 'circle') {
       st.center = toLonLat(e.coordinate, UTM).map((v) => Math.round(v * 1e6) / 1e6);
       run();
-    } else if (st.tool === 'boundary' && (st.level === 'regbez' || st.level === 'kreis' || st.level === 'plz5')) {
+    } else if (st.tool === 'boundary') {
+      // Klick in die Karte: Gebiet hinzufügen bzw. wieder entfernen
       const [lon, lat] = toLonLat(e.coordinate, UTM);
       const r = await api('GET', `/geo/resolve?lon=${lon}&lat=${lat}`).catch(() => null);
-      const code = st.level === 'plz5' ? r?.plz5 : r?.[st.level];
-      if (code) { st.code = code; renderTool(); run(); }
+      const code = r?.[st.level];
+      if (code) { toggleCode(code); renderTool(); run(); }
     }
   });
 
@@ -106,7 +108,11 @@ export async function renderSituation(root, { me, eventId, navigate }) {
   function definition() {
     if (st.tool === 'polygon') return st.polygon ? { type: 'polygon', coordinates: st.polygon } : null;
     if (st.tool === 'circle') return st.center ? { type: 'circle', center: st.center, radiusM: Math.round(st.radiusKm * 1000) } : null;
-    return st.code ? { type: 'boundary', level: st.level, code: st.code } : null;
+    if (!st.codes.length) return null;
+    return st.codes.length === 1 ? { type: 'boundary', level: st.level, code: st.codes[0] } : { type: 'boundary', level: st.level, codes: [...st.codes] };
+  }
+  function toggleCode(code) {
+    st.codes = st.codes.includes(code) ? st.codes.filter((c) => c !== code) : [...st.codes, code].slice(0, 60);
   }
   function run() {
     clearTimeout(timer);
@@ -143,6 +149,10 @@ export async function renderSituation(root, { me, eventId, navigate }) {
     areaSrc.addFeature(geojson.readFeature({ type: 'Feature', geometry: r.area }));
     if (r.definition.type === 'circle') areaSrc.addFeature(geojson.readFeature({ type: 'Feature', geometry: { type: 'Point', coordinates: r.definition.center } }));
     if (r.buffer) bufSrc.addFeature(geojson.readFeature({ type: 'Feature', geometry: r.buffer }));
+    if (st.fitNext) {
+      st.fitNext = false;
+      map.view.fit(areaSrc.getExtent(), { padding: [110, 300, 60, 440], maxZoom: 13, duration: 300 });
+    }
     const g = groupResult(r);
     facLayer.setHighlight(new Map(g.items.map(({ f, num, zone, muted }) => [f.id, { zone, num, muted }])));
     summary.textContent = summaryText(r, g);
@@ -171,7 +181,7 @@ export async function renderSituation(root, { me, eventId, navigate }) {
   const toolHint = () => ({
     polygon: 'Fläche in der Karte zeichnen: Eckpunkte per Klick setzen, mit Doppelklick abschließen.',
     circle: 'Mittelpunkt per Klick in die Karte setzen.',
-    boundary: 'Gebiet auswählen oder in die Karte klicken.',
+    boundary: 'Ein oder mehrere Gebiete auswählen – oder in die Karte klicken, um Gebiete hinzuzufügen bzw. wieder zu entfernen.',
   })[st.tool];
   const toolBox = h('div', { class: 'tool-box' });
   const segBtn = (tool, icon, label) => {
@@ -202,21 +212,41 @@ export async function renderSituation(root, { me, eventId, navigate }) {
         h('div', {}, h('div', { class: 'range-head' }, h('label', { class: 'lbl', for: 'ev-r' }, 'Radius'), val), range));
     } else {
       const typeSel = h('select', { id: 'ev-at', class: 'input' },
-        [['regbez', 'Regierungsbezirk'], ['kreis', 'Kreis / kreisfr. Stadt'], ['plz5', 'PLZ-Gebiet (5-stellig)']].map(([v, t]) => h('option', { value: v, selected: st.level === v, disabled: !levelsLoaded.has(v) }, t)));
+        [['regbez', 'Regierungsbezirk'], ['kreis', 'Kreis / kreisfr. Stadt'], ['gemeinde', 'Gemeinde'], ['plz5', 'PLZ-Gebiet (5-stellig)']].map(([v, t]) => h('option', { value: v, selected: st.level === v, disabled: !levelsLoaded.has(v) }, t)));
       const valWrap = h('div', { class: 'selw' });
-      const fillVals = async () => {
-        if (st.level === 'plz5' && !areaOptions.plz5) areaOptions.plz5 = (await api('GET', '/boundaries/plz5').catch(() => ({ features: [] }))).features.map((f) => ({ code: f.properties.code, name: `${f.properties.code} ${f.properties.name}` }));
-        const opts = areaOptions[st.level] || [];
-        const sel = h('select', { id: 'ev-av', class: 'input' }, h('option', { value: '' }, 'Bitte wählen …'), opts.map((o) => h('option', { value: o.code, selected: o.code === st.code }, o.name)));
-        sel.addEventListener('change', () => { st.code = sel.value; run(); if (sel.value && st.level !== 'plz5') map.zoomToBoundary(st.level, sel.value).catch(() => {}); });
-        valWrap.replaceChildren(sel, svg(UI.down, { size: 14, stroke: 2.4 }));
+      const chips = h('div', { class: 'area-chips', 'aria-live': 'polite' });
+      const nameOf = (code) => (areaOptions[st.level] || []).find((o) => o.code === code)?.name || code;
+      const paintChips = () => {
+        chips.replaceChildren(...st.codes.map((c) => h('span', { class: 'area-chip' }, nameOf(c),
+          h('button', { type: 'button', 'aria-label': `${nameOf(c)} entfernen`, onClick: () => { toggleCode(c); fillVals(); run(); } }, svg(UI.close, { size: 12, stroke: 2.4 })))));
+        if (st.codes.length > 1) chips.append(h('button', { class: 'btn btn-plain btn-sm', type: 'button', onClick: () => { st.codes = []; fillVals(); run(); } }, 'Alle entfernen'));
       };
-      typeSel.addEventListener('change', () => { st.level = typeSel.value; st.code = ''; fillVals(); run(); });
+      const fillVals = async () => {
+        if ((st.level === 'plz5' || st.level === 'gemeinde') && !areaOptions[st.level]) {
+          const fc = await api('GET', `/boundaries/${st.level}`).catch(() => ({ features: [] }));
+          areaOptions[st.level] = fc.features.map((f) => ({ code: f.properties.code, name: st.level === 'plz5' ? `${f.properties.code} ${f.properties.name}` : f.properties.name }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+        }
+        const opts = (areaOptions[st.level] || []).filter((o) => !st.codes.includes(o.code));
+        const sel = h('select', { id: 'ev-av', class: 'input' }, h('option', { value: '' }, st.codes.length ? 'Weiteres Gebiet hinzufügen …' : 'Bitte wählen …'), opts.map((o) => h('option', { value: o.code }, o.name)));
+        sel.addEventListener('change', () => {
+          if (!sel.value) return;
+          const added = sel.value;
+          toggleCode(added);
+          st.fitNext = true; // nach der Abfrage auf alle gewählten Gebiete zoomen
+          fillVals();
+          run();
+        });
+        valWrap.replaceChildren(sel, svg(UI.down, { size: 14, stroke: 2.4 }));
+        paintChips();
+      };
+      typeSel.addEventListener('change', () => { st.level = typeSel.value; st.codes = []; fillVals(); run(); });
       fillVals();
       toolBox.replaceChildren(h('div', { class: 'tool-hint' }, toolHint()),
         h('div', { class: 'area-grid' },
           h('div', {}, h('label', { class: 'lbl', for: 'ev-at' }, 'Gebietsart'), h('div', { class: 'selw' }, typeSel, svg(UI.down, { size: 14, stroke: 2.4 }))),
-          h('div', {}, h('label', { class: 'lbl', for: 'ev-av' }, 'Auswahl'), valWrap)));
+          h('div', {}, h('label', { class: 'lbl', for: 'ev-av' }, 'Gebiete'), valWrap)),
+        chips);
     }
   }
   const fmtKm = (v) => v.toLocaleString('de-DE', { maximumFractionDigits: 1 });

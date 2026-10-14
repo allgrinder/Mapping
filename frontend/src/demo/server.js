@@ -397,10 +397,19 @@ async function buildArea(def) {
     return { area: { type: 'Polygon', coordinates: [ring] }, label: `Radius ${(r / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`, definition: { type: 'circle', center: def.center, radiusM: r } };
   }
   if (def.type === 'boundary') {
+    const codes = [...new Set(Array.isArray(def.codes) ? def.codes : def.code ? [def.code] : [])];
+    if (!codes.length || codes.length > 60 || codes.some((c) => typeof c !== 'string')) bad('Bitte ein Gebiet auswählen.');
     const fc = await staticJson(`boundaries-${def.level}.json`, null);
-    const f = fc?.features?.find((x) => x.properties.code === def.code) || bad('Das gewählte Gebiet ist nicht vorhanden.');
-    const lbl = { regbez: 'Regierungsbezirk', kreis: 'Kreis/Stadt', gemeinde: 'Gemeinde', plz5: 'PLZ', plz2: 'PLZ-Region' }[def.level];
-    return { area: f.geometry, label: `${lbl} ${f.properties.name}`, definition: { type: 'boundary', level: def.level, code: def.code } };
+    const feats = codes.map((c) => fc?.features?.find((x) => x.properties.code === c) || bad('Das gewählte Gebiet ist nicht vorhanden.'));
+    const [one, many] = { regbez: ['Regierungsbezirk', 'Regierungsbezirke'], kreis: ['Kreis/Stadt', 'Kreise/Städte'], gemeinde: ['Gemeinde', 'Gemeinden'], plz5: ['PLZ', 'PLZ-Gebiete'], plz2: ['PLZ-Region', 'PLZ-Regionen'] }[def.level];
+    const names = feats.map((f) => f.properties.name);
+    // Demo: Flächen als MultiPolygon zusammenfassen (der Server vereinigt sie exakt per ST_Union)
+    const polys = feats.flatMap((f) => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates));
+    const label = names.length === 1 ? `${one} ${names[0]}` : `${many} ${names.length <= 4 ? names.join(', ') : `${names.slice(0, 3).join(', ')} und ${names.length - 3} weitere`}`;
+    return {
+      area: feats.length === 1 ? feats[0].geometry : { type: 'MultiPolygon', coordinates: polys }, label,
+      definition: codes.length === 1 ? { type: 'boundary', level: def.level, code: codes[0] } : { type: 'boundary', level: def.level, codes },
+    };
   }
   return bad('Unbekannter Gebietstyp.');
 }

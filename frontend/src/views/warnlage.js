@@ -92,10 +92,7 @@ export async function renderWarnlage(root, { navigate }) {
       h('span', { class: 'wl-item-text' }, h('span', { class: 'wl-kind' }, 'Waldbrandgefahrenindex (DWD)'),
         h('span', { class: 'wl-wtitle' }, `Höchste Stufe heute: ${d.wbi.max} von 5`),
         h('span', { class: 'cap' }, `${d.wbi.stations.length} Stationen in NRW · Punkte auf der Karte`)))] : []));
-    sourceBox.replaceChildren(h('div', { class: 'sec' }, 'Dienststatus'), ...d.sources.map((s) => h('div', { class: 'wl-src' },
-      h('span', { class: 'wl-sdot ' + (s.status === 'ok' ? 'ok' : 'err') }),
-      h('span', { style: { flex: '1' } }, s.label),
-      h('span', { class: 'cap' }, s.status === 'ok' ? `OK · ${fmtTime(s.fetchedAt)}` : s.stale ? `gestört – Stand ${fmtTime(s.fetchedAt)}` : 'nicht erreichbar'))));
+    sourceBox.replaceChildren(h('div', { class: 'sec' }, 'Dienststatus'), ...d.sources.map(sourceRow));
   }
 
   const stop = startPolling((d, err) => {
@@ -119,4 +116,22 @@ export async function renderWarnlage(root, { navigate }) {
         h('div', { class: 'cap wl-note' }, 'Quellen: amtliche Warnmeldungen (MoWaS, DWD) und Waldbrandgefahrenindex (DWD, CC BY 4.0). Warngebiete werden mit dem Bestand verschnitten; die Einstufung „gefährdet bei“ bleibt unverändert.'))),
     h('div', { class: 'ctl attribution', style: { right: '424px' } }, [...(cfg.attributions || []), 'Warnungen: BBK, DWD'].join(' · ')));
   return () => { stop(); map.destroy(); };
+}
+
+/** Statuszeile je Dienst – mit Fehlertext, damit Ursachen (Proxy, DNS, HTTP-Status) erkennbar sind. */
+function sourceRow(s) {
+  const extra = [];
+  if (s.pending) extra.push(`${s.pending} Warngebiete werden nachgeladen`);
+  if (s.failed) extra.push(`${s.failed} nicht ladbar`);
+  const text = s.status === 'ok' ? `OK · ${fmtTime(s.fetchedAt)}${s.count ? ` · ${s.count} in NRW` : ''}`
+    : s.status === 'pending' ? 'wird abgerufen …'
+      : s.stale ? `gestört – Stand ${fmtTime(s.fetchedAt)}` : 'nicht erreichbar';
+  const dot = s.status === 'ok' ? 'ok' : s.status === 'pending' ? 'wait' : 'err';
+  return h('div', { class: 'wl-src-wrap' },
+    h('div', { class: 'wl-src' },
+      h('span', { class: 'wl-sdot ' + dot }),
+      h('span', { style: { flex: '1' } }, s.label),
+      h('span', { class: 'cap' }, text)),
+    extra.length ? h('div', { class: 'cap wl-src-note' }, extra.join(' · ')) : null,
+    s.status === 'error' && s.error ? h('div', { class: 'cap wl-src-note err' }, `Ursache: ${s.error}`) : null);
 }

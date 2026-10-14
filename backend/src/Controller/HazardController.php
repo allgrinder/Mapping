@@ -32,11 +32,12 @@ final class HazardController
 
     public function warnings(Request $req, Response $res): Response
     {
+        @set_time_limit(90); // ohne Hintergrunddienst aktualisiert diese Anfrage selbst (mit Zeitbudget)
         $d = $this->warnings->get();
         $sources = [];
         foreach (['mowas' => 'Bevölkerungswarnungen (MoWaS)', 'dwd' => 'Unwetterwarnungen (DWD)', 'wbi' => 'Waldbrandgefahrenindex (DWD)'] as $k => $label) {
             $s = $d['sources'][$k] ?? ['status' => 'pending'];
-            $sources[] = ['id' => $k, 'label' => $label, 'status' => $s['status'], 'error' => $s['error'] ?? null, 'fetchedAt' => isset($s['fetchedAt']) ? gmdate('Y-m-d H:i:s', $s['fetchedAt']) : null, 'count' => $s['count'] ?? 0, 'stale' => $s['stale'] ?? false];
+            $sources[] = ['id' => $k, 'label' => $label, 'status' => $s['status'], 'error' => $s['error'] ?? null, 'fetchedAt' => isset($s['fetchedAt']) ? gmdate('Y-m-d H:i:s', $s['fetchedAt']) : null, 'count' => $s['count'] ?? 0, 'stale' => $s['stale'] ?? false, 'pending' => $s['pending'] ?? 0, 'failed' => $s['failed'] ?? 0];
         }
         return Json::respond($res, [
             'checkedAt' => isset($d['checkedAt']) ? gmdate('Y-m-d H:i:s', $d['checkedAt']) : null,

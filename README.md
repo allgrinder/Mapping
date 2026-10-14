@@ -134,11 +134,15 @@ zwischengespeicherten Daten gelöscht. Voraussetzung: Auslieferung über HTTPS (
 
 ## Live-Warnlage und Hochwasser (Stufe 2)
 Quellen und Lizenzen: `config/services.php` (`wms.hochwasser`, `warnings`). Abruf erfolgt nur serverseitig über `OUTBOUND_PROXY`.
-Die Warnlage wird bei Bedarf höchstens alle `WARNINGS_INTERVAL` Sekunden erneuert; alternativ per Cron:
+Die Warnlage aktualisiert ein Hintergrunddienst alle `WARNINGS_INTERVAL` Sekunden (Standard 300) – im Docker-Image startet er
+automatisch und schreibt je Durchlauf eine Zeile `[warnlage] …` mit Status bzw. Fehlerursache ins Container-Log. Ohne Docker:
 ```
-*/5 * * * * cd /pfad/backend && php bin/refresh-warnings.php
+php bin/warnings-worker.php            # als Dienst (systemd o. Ä.), oder per Cron: */5 * * * * … php bin/refresh-warnings.php
 ```
-Fällt ein Dienst aus, bleibt der letzte Stand sichtbar und der Status wird angezeigt. Die Layer der Hochwassergefahrenkarten
+Läuft kein Hintergrunddienst, aktualisiert die Weboberfläche selbst – mit Zeitbudget (15 s): Warngebiete, die nicht mehr hineinpassen,
+werden beim nächsten Abruf nachgeladen; einzelne nicht ladbare Warngebiete legen die Quelle nicht lahm. Der Waldbrandindex
+(Tagesprognose) wird höchstens stündlich geladen. Fällt ein Dienst aus, bleibt der letzte Stand sichtbar; die Warnlage-Ansicht
+zeigt je Dienst den Status und die Fehlerursache. Die Layer der Hochwassergefahrenkarten
 werden aus den GetCapabilities ermittelt (HQhäufig/HQ100/HQextrem); bei Bedarf über `HWGK_LAYER_HQ100` usw. festlegen.
 
 ## Import & Export (Stufe 3)

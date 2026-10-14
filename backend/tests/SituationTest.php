@@ -111,6 +111,30 @@ final class SituationTest extends TestCase
         $this->assertFalse(SituationService::selfIntersects([[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]));
     }
 
+    public function testSeveralAreasFormOneEventArea(): void
+    {
+        $def = ['type' => 'boundary', 'level' => 'kreis', 'codes' => ['05111', '05315']];
+        $r = $this->query($def);
+        $this->assertSame(['a', 'c', 'd'], $this->names($r['inArea']));
+        $this->assertSame('Kreise/Städte Düsseldorf, Köln', $r['label']);
+        $this->assertSame($def, $r['definition']);
+        $this->assertContains($r['area']['type'], ['Polygon', 'MultiPolygon']);
+        // mit Puffer: b liegt außerhalb beider Kreise
+        $r = $this->query($def, 30000);
+        $this->assertSame(['a', 'c', 'd'], $this->names($r['inArea']));
+        $this->assertSame(['b'], $this->names($r['inBuffer']));
+        // ein Eintrag in der Liste = wie bisher ein einzelnes Gebiet; Doppelte werden ignoriert
+        $this->assertSame(['type' => 'boundary', 'level' => 'kreis', 'code' => '05315'], $this->query(['type' => 'boundary', 'level' => 'kreis', 'codes' => ['05315', '05315']])['definition']);
+
+        foreach ([['05111', '99999'], [], ['05111', 5315], array_fill(0, 61, '05111'), 'x'] as $codes) {
+            $this->assertSame(422, $this->call('POST', '/api/situation/query', ['definition' => ['type' => 'boundary', 'level' => 'kreis', 'codes' => $codes]])['status'], json_encode($codes));
+        }
+        $e = $this->call('POST', '/api/events', ['name' => 'Großlage Rhein', 'definition' => $def, 'bufferM' => 0]);
+        $this->assertSame(201, $e['status'], json_encode($e['body']));
+        $this->assertSame($def, $e['body']['definition']);
+        $this->assertSame(3, count($e['body']['snapshot']['inArea']));
+    }
+
     public function testScenarioRatesFacilitiesAtRisk(): void
     {
         $scen = array_column(self::$db->query('SELECT name, id FROM scenarios')->fetchAll(), 'id', 'name');

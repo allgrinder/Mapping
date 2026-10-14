@@ -15,8 +15,27 @@ class WarningService
     public const NRW_BBOX = [5.85, 50.32, 9.47, 52.54];
     public const LEVELS = ['Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
 
-    public function __construct(private array $cfg, private ?HttpClient $http, private string $cacheDir, private ?\Closure $clock = null)
+    /**
+     * @param float $budgetS Zeitbudget je Aktualisierung in Sekunden. Was nicht hineinpasst (Warngebiete, Stationen),
+     *                       wird beim nächsten Lauf nachgeholt – bereits geladene Warngebiete sind gecacht. So bleibt eine
+     *                       Webanfrage deutlich unter dem PHP-Zeitlimit; der Hintergrunddienst (bin/warnings-worker.php) nutzt mehr.
+     */
+    public function __construct(private array $cfg, private ?HttpClient $http, private string $cacheDir, private ?\Closure $clock = null, private float $budgetS = 15.0)
     {
+    }
+
+    /** Läuft ein Hintergrunddienst, aktualisiert die Webanfrage nicht selbst. */
+    public function markWorkerAlive(): void
+    {
+        @mkdir($this->cacheDir, 0775, true);
+        file_put_contents($this->cacheDir . '/warnings-worker.json', json_encode(['at' => $this->now()]));
+    }
+
+    private function workerAlive(int $interval): bool
+    {
+        $f = $this->cacheDir . '/warnings-worker.json';
+        $at = is_file($f) ? (int) (json_decode((string) file_get_contents($f), true)['at'] ?? 0) : 0;
+        return $at > $this->now() - 3 * max(60, $interval);
     }
 
     private function now(): int
@@ -30,7 +49,8 @@ class WarningService
         $file = $this->cacheDir . '/warnings.json';
         $data = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
         $interval = (int) ($this->cfg['interval_s'] ?? 300);
-        if ($forceRefresh || !$data || ($data['checkedAt'] ?? 0) < $this->now() - $interval) {
+        $due = !$data || ($data['checkedAt'] ?? 0) < $this->now() - $interval;
+        if ($forceRefresh || ($due && !$this->workerAlive($interval))) {
             $lock = fopen($this->cacheDir . '/warnings.lock', 'c');
             if ($lock && flock($lock, LOCK_EX | LOCK_NB)) {
                 $data = $this->refresh($data ?? []);
@@ -48,27 +68,36 @@ class WarningService
 
     private function refresh(array $prev): array
     {
+        $deadline = microtime(true) + $this->budgetS;
         $out = ['checkedAt' => $this->now(), 'sources' => [], 'warnings' => [], 'wbi' => $prev['wbi'] ?? null];
-        $prevBySource = [];
+        $prevById = [];
         foreach ($prev['warnings'] ?? [] as $w) {
-            $prevBySource[$w['source']][] = $w;
+            $prevById[$w['source']][$w['id']] = $w;
         }
         foreach (($this->cfg['nina']['feeds'] ?? []) as $source => $path) {
             try {
-                $list = $this->fetchNina($source, $path);
+                [$list, $pending, $failed] = $this->fetchNina($source, $path, $deadline, $prevById[$source] ?? []);
                 $out['warnings'] = [...$out['warnings'], ...$list];
-                $out['sources'][$source] = ['status' => 'ok', 'fetchedAt' => $this->now(), 'count' => count($list)];
+                $out['sources'][$source] = ['status' => 'ok', 'fetchedAt' => $this->now(), 'count' => count($list)]
+                    + ($pending ? ['pending' => $pending] : []) + ($failed ? ['failed' => $failed] : []);
             } catch (\Throwable $e) {
-                $old = $prevBySource[$source] ?? [];
+                $old = array_values($prevById[$source] ?? []);
                 $out['warnings'] = [...$out['warnings'], ...$old];
                 $out['sources'][$source] = ['status' => 'error', 'error' => $e->getMessage(), 'fetchedAt' => $prev['sources'][$source]['fetchedAt'] ?? null, 'count' => count($old), 'stale' => (bool) $old];
             }
         }
-        try {
-            $out['wbi'] = $this->fetchWbi();
-            $out['sources']['wbi'] = ['status' => 'ok', 'fetchedAt' => $this->now(), 'count' => count($out['wbi']['stations'])];
-        } catch (\Throwable $e) {
-            $out['sources']['wbi'] = ['status' => 'error', 'error' => $e->getMessage(), 'fetchedAt' => $prev['sources']['wbi']['fetchedAt'] ?? null, 'count' => count($out['wbi']['stations'] ?? []), 'stale' => (bool) ($out['wbi'] ?? null)];
+        // Waldbrandgefahrenindex ist eine Tagesprognose: höchstens stündlich neu laden
+        $wbiPrev = $prev['sources']['wbi'] ?? null;
+        $wbiInterval = (int) ($this->cfg['wbi']['interval_s'] ?? 3600);
+        if ($wbiPrev && $wbiPrev['status'] === 'ok' && ($wbiPrev['fetchedAt'] ?? 0) > $this->now() - $wbiInterval && $out['wbi']) {
+            $out['sources']['wbi'] = $wbiPrev;
+        } else {
+            try {
+                $out['wbi'] = $this->fetchWbi($deadline);
+                $out['sources']['wbi'] = ['status' => 'ok', 'fetchedAt' => $this->now(), 'count' => count($out['wbi']['stations'])];
+            } catch (\Throwable $e) {
+                $out['sources']['wbi'] = ['status' => 'error', 'error' => $e->getMessage(), 'fetchedAt' => $wbiPrev['fetchedAt'] ?? null, 'count' => count($out['wbi']['stations'] ?? []), 'stale' => (bool) ($out['wbi'] ?? null)];
+            }
         }
         return $out;
     }
@@ -89,29 +118,42 @@ class WarningService
         return $d;
     }
 
-    /** @return list<array> Warnungen mit Geometrie, die NRW berühren */
-    private function fetchNina(string $source, string $path): array
+    /**
+     * @param array<string,array> $prev letzte bekannte Warnungen dieser Quelle nach ID (Ersatz, falls ein Warngebiet gerade nicht ladbar ist)
+     * @return array{list<array>,int,int} Warnungen mit Geometrie, die NRW berühren; Anzahl zurückgestellter und fehlgeschlagener Warngebiete
+     */
+    private function fetchNina(string $source, string $path, float $deadline, array $prev): array
     {
         $n = $this->cfg['nina'];
         $items = $this->getJson($n['base'] . $path);
         $out = [];
-        $details = 0;
-        foreach ($items as $it) {
+        $details = $pending = $failed = 0;
+        foreach (array_is_list($items) ? $items : [] as $it) {
             $id = (string) ($it['id'] ?? '');
             if ($id === '' || !preg_match('/^[A-Za-z0-9._-]{3,200}$/', $id)) {
                 continue;
             }
             $version = (string) ($it['version'] ?? '0');
             $cacheFile = $this->cacheDir . '/nina/' . sha1($id . '|' . $version) . '.json';
+            $geo = null;
             if (is_file($cacheFile)) {
                 $geo = json_decode((string) file_get_contents($cacheFile), true);
+            } elseif (microtime(true) > $deadline || ++$details > (int) ($n['max_details'] ?? 300)) {
+                $pending++; // nächster Lauf
             } else {
-                if (++$details > (int) ($n['max_details'] ?? 300)) {
-                    break;
+                try {
+                    $geo = $this->getJson($n['base'] . str_replace('{id}', rawurlencode($id), $n['geojson']));
+                    @mkdir(dirname($cacheFile), 0775, true);
+                    file_put_contents($cacheFile, json_encode($geo));
+                } catch (\Throwable) {
+                    $failed++; // einzelnes Warngebiet nicht ladbar – die übrigen trotzdem anzeigen
                 }
-                $geo = $this->getJson($n['base'] . str_replace('{id}', rawurlencode($id), $n['geojson']));
-                @mkdir(dirname($cacheFile), 0775, true);
-                file_put_contents($cacheFile, json_encode($geo));
+            }
+            if ($geo === null) {
+                if (isset($prev[$id])) {
+                    $out[] = $prev[$id];
+                }
+                continue;
             }
             $geom = $this->mergeGeometry($geo);
             $bbox = $geom ? GeoUtil::bbox($geom) : null;
@@ -128,7 +170,7 @@ class WarningService
                 'bbox' => $bbox, 'geometry' => $geom,
             ];
         }
-        return $out;
+        return [$out, $pending, $failed];
     }
 
     /** NINA liefert eine FeatureCollection; Flächen zu einer Geometrie zusammenfassen. */
@@ -162,7 +204,7 @@ class WarningService
     }
 
     /** Waldbrandgefahrenindex (heutiger Wert) aller NRW-Stationen. */
-    private function fetchWbi(): array
+    private function fetchWbi(float $deadline): array
     {
         $w = $this->cfg['wbi'];
         if (!$this->http) {
@@ -179,6 +221,9 @@ class WarningService
             throw new \RuntimeException('Stationsliste nicht gefunden.');
         }
         $list = $this->http->get($w['base'] . $listFile);
+        if ($list['status'] !== 200) {
+            throw new \RuntimeException("Stationsliste: HTTP {$list['status']}");
+        }
         $stations = self::parseStationList($list['body'], $w['state'] ?? 'Nordrhein-Westfalen');
         $files = [];
         foreach ($hrefs as $h) {
@@ -188,7 +233,14 @@ class WarningService
         }
         $out = [];
         foreach ($files as $sid => $file) {
-            $r = $this->http->get($w['base'] . $file);
+            if (microtime(true) > $deadline && $out) {
+                break; // Rest beim nächsten Lauf
+            }
+            try {
+                $r = $this->http->get($w['base'] . $file);
+            } catch (\Throwable) {
+                continue;
+            }
             if ($r['status'] !== 200) {
                 continue;
             }

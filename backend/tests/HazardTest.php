@@ -119,6 +119,51 @@ final class HazardTest extends TestCase
         $this->assertNotNull($d['wbi']);
     }
 
+    public function testBrokenWarningAreaDoesNotBreakTheSource(): void
+    {
+        // München-Warngebiet liefert einen Serverfehler → MoWaS bleibt „ok“, Köln wird angezeigt
+        $http = new FakeHttp(['#/warnings/mow\\.DE-BY-M-002\\.geojson$#' => ['status' => 500, 'body' => '', 'contentType' => 'text/plain']] + $this->routes());
+        $svc = new WarningService($this->cfg(), $http, $this->cache, fn () => 1_800_000_000);
+        $d = $svc->get();
+        $this->assertSame('ok', $d['sources']['mowas']['status']);
+        $this->assertSame(1, $d['sources']['mowas']['failed']);
+        $this->assertContains('Gefahrstoffaustritt in Köln-Porz', array_column($d['warnings'], 'title'));
+    }
+
+    public function testTimeBudgetDefersDetailsToNextRun(): void
+    {
+        $http = new FakeHttp($this->routes());
+        $t = 1_800_000_000;
+        $clock = function () use (&$t) { return $t; };
+        // Budget 0: Übersichten werden geladen, Warngebiete zurückgestellt – die Webanfrage bleibt kurz
+        $d = (new WarningService($this->cfg(), $http, $this->cache, $clock, 0.0))->get();
+        $this->assertSame('ok', $d['sources']['mowas']['status']);
+        $this->assertSame(2, $d['sources']['mowas']['pending']);
+        $this->assertSame([], array_filter($http->calls, fn ($u) => str_contains($u, '.geojson')));
+        $this->assertSame('ok', $d['sources']['wbi']['status'], 'mindestens eine Station wird immer geladen');
+        // nächster Lauf mit Budget holt den Rest
+        $t += 3600;
+        $d = (new WarningService($this->cfg(), $http, $this->cache, $clock))->get();
+        $this->assertArrayNotHasKey('pending', $d['sources']['mowas']);
+        $this->assertCount(2, $d['warnings']);
+    }
+
+    public function testRunningWorkerTakesOverRefreshing(): void
+    {
+        $http = new FakeHttp($this->routes());
+        $t = 1_800_000_000;
+        $svc = new WarningService($this->cfg(), $http, $this->cache, function () use (&$t) { return $t; });
+        $svc->get(true);
+        $svc->markWorkerAlive();
+        $calls = count($http->calls);
+        $t += 600; // fällig, aber der Hintergrunddienst lebt → Webanfrage liefert nur den Cache
+        $svc->get();
+        $this->assertCount($calls, $http->calls);
+        $t += 3600; // Dienst seit über 3 Intervallen still → Webanfrage aktualisiert selbst
+        $svc->get();
+        $this->assertGreaterThan($calls, count($http->calls));
+    }
+
     public function testFloodLayerDiscoveryAndFeatureInfo(): void
     {
         $caps = '<?xml version="1.0"?><WMS_Capabilities xmlns="http://www.opengis.net/wms"><Capability><Layer><Title>HW</Title>'

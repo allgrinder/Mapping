@@ -6,4 +6,6 @@ mkdir -p "$S/cache" "$S/logs" "$S/tiles" "$S/import"
 chown -R www-data:www-data "$S"
 cd /app/backend
 su -s /bin/sh www-data -c "php bin/docker-init.php" || echo "[kritis] Einrichtung mit Fehler beendet – siehe oben. Die Weboberfläche startet trotzdem."
+# Live-Warnlage im Hintergrund aktualisieren (unabhängig von Seitenaufrufen)
+su -s /bin/sh www-data -c "php bin/warnings-worker.php" &
 exec apache2-foreground
