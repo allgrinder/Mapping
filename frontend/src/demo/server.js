@@ -1,0 +1,196 @@
+// Demo-Modus (GitHub Pages): ersetzt das PHP-Backend durch einen kleinen Server im Browser.
+// Daten liegen nur im localStorage dieses Browsers. Keine echte Sicherheit – nur zum Ausprobieren.
+import { ApiError } from '../api.js';
+import { RULES } from '../views/password.js';
+
+const KEY = 'kl-demo-v1';
+const SYMBOLS = ['cap', 'cross', 'flask', 'box', 'building', 'shield', 'wave', 'rain', 'fire', 'wind', 'power', 'hazard'];
+const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+function seed() {
+  const cat = [['Hochschulen', '#2F6FDE', 'cap'], ['Universitätskliniken', '#D0364F', 'cross'], ['Außeruniversitäre Forschungseinrichtungen', '#7A4BD6', 'flask'], ['Archive (inkl. Landesarchiv)', '#A8620A', 'box']];
+  const scen = [['Hochwasser', '#2F6FDE', 'wave'], ['Starkregen', '#1F7A8C', 'rain'], ['Waldbrand', '#C2410C', 'fire'], ['Sturm', '#5B6472', 'wind'], ['Langanhaltender Stromausfall', '#A16207', 'power'], ['Gefahrstoffunfall', '#7A4BD6', 'hazard'], ['Cyberangriff', '#334155', 'shield']];
+  const md = (list) => list.map(([name, color, symbol], i) => ({ id: i + 1, name, color, symbol, sortOrder: (i + 1) * 10, active: true, updatedAt: now() }));
+  return {
+    seq: 100,
+    sessionUser: null,
+    users: [
+      { id: 1, username: 'admin', displayName: 'Demo-Administration', password: 'demo', role: 'admin', active: true, mustChangePassword: false, lastLoginAt: null, createdAt: now(), updatedAt: now() },
+      { id: 2, username: 'leser', displayName: 'Demo-Lesezugriff', password: 'demo', role: 'lesen', active: true, mustChangePassword: false, lastLoginAt: null, createdAt: now(), updatedAt: now() },
+    ],
+    categories: md(cat),
+    scenarios: md(scen),
+  };
+}
+
+let db = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.users) return s; } catch { /* neu anlegen */ }
+  return seed();
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* ohne Speicher: nur bis zum Neuladen */ }
+}
+export function resetDemo() {
+  db = seed();
+  save();
+}
+
+const fail = (status, code, message, fields = {}) => { throw new ApiError(status, code, message, fields); };
+const me = () => db.users.find((u) => u.id === db.sessionUser && u.active) || null;
+const present = (u) => ({ id: u.id, username: u.username, displayName: u.displayName, role: u.role, mustChangePassword: u.mustChangePassword });
+function requireUser(role, allowPw = false) {
+  const u = me();
+  if (!u) fail(401, 'unauthenticated', 'Anmeldung erforderlich.');
+  if (u.mustChangePassword && !allowPw) fail(403, 'password_change_required', 'Das Initialpasswort muss zuerst geändert werden.');
+  if (role && u.role !== role) fail(403, 'forbidden', 'Keine Berechtigung.');
+  return u;
+}
+function genPassword() {
+  const a = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let p = '';
+  for (let i = 0; i < 14; i++) p += a[Math.floor(Math.random() * a.length)];
+  return p.slice(0, 6) + '-' + p.slice(6) + '7aK';
+}
+
+let staticCache = {};
+async function staticJson(name, fallback) {
+  staticCache[name] ??= fetch(`./demo-data/${name}`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : fallback)).catch(() => fallback);
+  return staticCache[name];
+}
+
+const GRID = {
+  srs: 'EPSG:25832', origin: [270000, 5850000], extent: [270000, 5550000, 570000, 5850000], tile_size: 256,
+  resolutions: [1171.875, 585.9375, 292.96875, 146.484375, 73.2421875, 36.62109375, 18.310546875, 9.1552734375, 4.57763671875, 2.288818359375, 1.1444091796875, 0.57220458984375],
+};
+
+function masterData(kind, method, rest, body, actor) {
+  const list = db[kind];
+  const validate = () => {
+    const errs = {};
+    if (typeof body?.name !== 'string' || body.name.trim().length < 2) errs.name = 'Länge muss zwischen 2 und 120 Zeichen liegen.';
+    if (!/^#[0-9a-f]{6}$/i.test(body?.color || '')) errs.color = 'Ungültiges Format.';
+    if (!SYMBOLS.includes(body?.symbol)) errs.symbol = 'Ungültiger Wert.';
+    if (Object.keys(errs).length) fail(422, 'validation_failed', 'Eingaben ungültig.', errs);
+  };
+  const dup = (name, id) => list.some((x) => x.name === name && x.id !== id) && fail(409, 'conflict', 'Der Name ist bereits vergeben.', { name: 'Der Name ist bereits vergeben.' });
+  if (method === 'GET' && !rest) {
+    requireUser();
+    return { items: [...list].sort((a, b) => a.sortOrder - b.sortOrder).map((x) => ({ ...x, usageCount: 0 })) };
+  }
+  requireUser('admin');
+  if (method === 'POST' && !rest) {
+    validate(); dup(body.name.trim());
+    const item = { id: ++db.seq, name: body.name.trim(), color: body.color.toUpperCase(), symbol: body.symbol, active: body.active !== false, sortOrder: Math.max(0, ...list.map((x) => x.sortOrder)) + 10, updatedAt: now() };
+    list.push(item); save();
+    return { id: item.id };
+  }
+  if (method === 'PUT' && rest === 'order') {
+    const ids = body?.ids;
+    if (!Array.isArray(ids) || ids.length !== list.length || new Set(ids).size !== ids.length || !list.every((x) => ids.includes(x.id))) fail(422, 'validation_failed', 'Die Reihenfolge muss alle Einträge genau einmal enthalten.');
+    ids.forEach((id, i) => { list.find((x) => x.id === id).sortOrder = (i + 1) * 10; });
+    save();
+    return { ok: true };
+  }
+  const item = list.find((x) => String(x.id) === rest) || fail(404, 'not_found', 'Nicht gefunden.');
+  if (method === 'PUT') {
+    validate(); dup(body.name.trim(), item.id);
+    Object.assign(item, { name: body.name.trim(), color: body.color.toUpperCase(), symbol: body.symbol, active: body.active !== false, updatedAt: now() });
+    save();
+    return { ok: true };
+  }
+  if (method === 'DELETE') {
+    db[kind] = list.filter((x) => x !== item); save();
+    return { ok: true };
+  }
+  return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
+}
+
+function users(method, rest, body) {
+  const actor = requireUser('admin');
+  const [idStr, action] = (rest || '').split('/');
+  if (method === 'GET' && !rest) return { items: [...db.users].sort((a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username, 'de')).map((u) => ({ ...present(u), active: u.active, lastLoginAt: u.lastLoginAt, createdAt: u.createdAt, updatedAt: u.updatedAt })) };
+  if (method === 'POST' && !rest) {
+    if (!/^[A-Za-z0-9._@-]{3,64}$/.test(body?.username || '')) fail(422, 'validation_failed', 'Eingaben ungültig.', { username: 'Ungültiges Format.' });
+    if (!['lesen', 'admin'].includes(body?.role)) fail(422, 'validation_failed', 'Eingaben ungültig.', { role: 'Ungültiger Wert.' });
+    if (db.users.some((u) => u.username === body.username)) fail(409, 'conflict', 'Benutzername existiert bereits.', { username: 'Benutzername existiert bereits.' });
+    const pw = genPassword();
+    const u = { id: ++db.seq, username: body.username, displayName: (body.displayName || '').trim() || null, password: pw, role: body.role, active: true, mustChangePassword: true, lastLoginAt: null, createdAt: now(), updatedAt: now() };
+    db.users.push(u); save();
+    return { id: u.id, initialPassword: pw };
+  }
+  const u = db.users.find((x) => String(x.id) === idStr) || fail(404, 'not_found', 'Benutzer nicht gefunden.');
+  const otherAdmins = db.users.filter((x) => x.role === 'admin' && x.active && x.id !== u.id).length;
+  if (method === 'PUT') {
+    const role = body?.role ?? u.role;
+    const active = body?.active ?? u.active;
+    if (u.role === 'admin' && (role !== 'admin' || !active) && otherAdmins === 0) fail(409, 'conflict', 'Der letzte aktive Administrator kann nicht entfernt werden.');
+    Object.assign(u, { role, active, displayName: body?.displayName ?? u.displayName, updatedAt: now() });
+    save();
+    return { ok: true };
+  }
+  if (method === 'DELETE') {
+    if (u.id === actor.id) fail(409, 'conflict', 'Das eigene Konto kann nicht gelöscht werden.');
+    if (u.role === 'admin' && otherAdmins === 0) fail(409, 'conflict', 'Der letzte aktive Administrator kann nicht entfernt werden.');
+    db.users = db.users.filter((x) => x !== u); save();
+    return { ok: true };
+  }
+  if (method === 'POST' && action === 'reset-password') {
+    u.password = genPassword(); u.mustChangePassword = true; save();
+    return { initialPassword: u.password };
+  }
+  return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
+}
+
+/** Beantwortet eine API-Anfrage wie das echte Backend (gleiche Pfade und Antwortformen). */
+export async function handle(method, path, body) {
+  await new Promise((r) => setTimeout(r, 60));
+  const [, section, ...restParts] = path.split('/');
+  const rest = restParts.join('/');
+  switch (section) {
+    case 'health': return { status: 'ok' };
+    case 'auth': {
+      if (rest === 'me') return { user: me() ? present(me()) : null, csrfToken: 'demo' };
+      if (rest === 'login') {
+        const u = db.users.find((x) => x.username === body?.username);
+        if (!u || u.password !== body?.password || !u.active) fail(401, 'invalid_credentials', 'Benutzername oder Passwort falsch.');
+        db.sessionUser = u.id; u.lastLoginAt = now(); save();
+        return { user: present(u), csrfToken: 'demo' };
+      }
+      if (rest === 'logout') { db.sessionUser = null; save(); return { ok: true }; }
+      if (rest === 'change-password') {
+        const u = requireUser(null, true);
+        if (body?.currentPassword !== u.password) fail(422, 'invalid_credentials', 'Das aktuelle Passwort ist falsch.', { currentPassword: 'Das aktuelle Passwort ist falsch.' });
+        const p = String(body?.newPassword || '');
+        if (!RULES.every(([, t]) => t(p)) || p.toLowerCase().includes(u.username.toLowerCase()) || p === u.password) fail(422, 'weak_password', 'Das Passwort erfüllt die Anforderungen nicht.', { newPassword: 'Das Passwort erfüllt die Anforderungen nicht.' });
+        u.password = p; u.mustChangePassword = false; save();
+        return { ok: true, csrfToken: 'demo' };
+      }
+      break;
+    }
+    case 'users': return users(method, rest, body);
+    case 'categories':
+    case 'scenarios': return masterData(section, method, rest, body);
+    case 'map': {
+      requireUser();
+      const meta = await staticJson('meta.json', null);
+      const levels = meta?.levels || {};
+      return {
+        grid: GRID,
+        viewExtent: [255000, 5545000, 560000, 5850000],
+        defaultBasemap: 'politisch',
+        basemaps: [
+          { id: 'topografisch', label: 'Topografisch', type: 'tiles', available: false, attribution: '© Geobasis NRW' },
+          { id: 'politisch', label: 'Politisch', type: 'boundaries', available: Boolean(levels.regbez), attribution: '© Geobasis NRW' },
+        ],
+        boundaries: Object.entries(levels).map(([level, count]) => ({ level, count, source: meta.source, license: meta.license, attribution: meta.attribution, importedAt: meta.generatedAt })),
+        attributions: meta ? [meta.attribution] : [],
+      };
+    }
+    case 'boundaries':
+      requireUser();
+      return staticJson(`boundaries-${rest}.json`, { type: 'FeatureCollection', features: [] });
+    default:
+  }
+  return fail(404, 'not_found', 'Nicht gefunden.');
+}

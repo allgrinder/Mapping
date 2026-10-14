@@ -1,4 +1,4 @@
-import { api, ApiError } from '../api.js';
+import { api, ApiError, DEMO } from '../api.js';
 import { h, svg } from '../ui/dom.js';
 import { UI } from '../ui/icons.js';
 import { nrwBackdrop } from '../ui/nrwBackdrop.js';
@@ -49,7 +49,9 @@ export function renderLogin(root, { onLoggedIn }) {
       pw.el,
       error),
     submit,
-    h('div', { class: 'cap' }, 'Passwort vergessen? Wenden Sie sich an die Administration Ihres Hauses.'));
+    DEMO
+      ? h('div', { class: 'demo-hint' }, h('strong', {}, 'Demo-Zugänge'), h('span', {}, 'admin / demo – Administration'), h('span', {}, 'leser / demo – nur lesen'))
+      : h('div', { class: 'cap' }, 'Passwort vergessen? Wenden Sie sich an die Administration Ihres Hauses.'));
 
   for (const el of [user, pw.input]) el.addEventListener('input', () => { error.hidden = true; });
 

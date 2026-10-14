@@ -39,7 +39,7 @@ final class BoundaryImporter
                     if (!array_key_exists($cfg['code_field'], $p) || !array_key_exists($cfg['name_field'], $p)) {
                         throw new RuntimeException(sprintf('Feld %s/%s fehlt in %s. Vorhanden: %s', $cfg['code_field'], $cfg['name_field'], basename($file), implode(', ', array_keys($p))));
                     }
-                    $code = $this->normalizeCode((string) $p[$cfg['code_field']], $level);
+                    $code = self::normalizeCode((string) $p[$cfg['code_field']], $level);
                     $geom = $f['geometry'];
                     if ($cfg['srs'] === 25832) {
                         $geom = Simplify::geometry($geom, (float) $cfg['simplify_m']);
@@ -204,7 +204,7 @@ final class BoundaryImporter
     }
 
     /** Schlüssel auf AGS-Länge der Ebene kürzen (DVG-KN ist ggf. mit Nullen aufgefüllt). */
-    public function normalizeCode(string $raw, string $level): string
+    public static function normalizeCode(string $raw, string $level): string
     {
         $digits = preg_replace('/\D/', '', $raw);
         $len = self::CODE_LEN[$level];

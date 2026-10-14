@@ -19,7 +19,18 @@ export function setCsrf(token) {
   csrfToken = token || null;
 }
 
+export const DEMO = import.meta.env.MODE === 'demo';
+
 export async function api(method, path, body) {
+  if (DEMO) {
+    const { handle } = await import('./demo/server.js');
+    try {
+      return await handle(method, path, body === undefined ? undefined : JSON.parse(JSON.stringify(body)));
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === 'unauthenticated' || err.code === 'password_change_required')) listeners.forEach((fn) => fn(err));
+      throw err;
+    }
+  }
   const headers = { Accept: 'application/json' };
   if (method !== 'GET' && csrfToken) headers['X-CSRF-Token'] = csrfToken;
   if (body !== undefined) headers['Content-Type'] = 'application/json';

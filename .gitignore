@@ -9,3 +9,5 @@ backend/public/assets/
 .env
 .phpunit.cache/
 backend/public/index.html
+frontend/dist-demo/
+frontend/demo-public/demo-data/*.json

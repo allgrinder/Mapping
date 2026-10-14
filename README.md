@@ -4,6 +4,14 @@ Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUN
 
 **Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Einrichtungen folgen in Arbeitspaket 4.
 
+## Demo im Browser (GitHub Pages)
+Bei jedem Push baut `.github/workflows/pages.yml` eine **Demo-Version** und veröffentlicht sie auf GitHub Pages.
+In der Demo läuft statt PHP/MariaDB ein kleiner Ersatz-Server im Browser (`frontend/src/demo/server.js`);
+Daten bleiben nur im jeweiligen Browser (localStorage). Zugänge: `admin` / `demo` und `leser` / `demo`.
+Die Verwaltungsgrenzen lädt der Workflow beim Bauen frisch von Geobasis NRW (DVG2, dl-de/zero-2.0).
+Lokal: `cd frontend && npm run build:demo` (Ergebnis in `frontend/dist-demo/`).
+Die Demo ersetzt **nicht** den Betrieb: Anmeldung, Rechte und Daten sind dort nicht geschützt.
+
 ## Technik
 PHP ≥ 8.3 (Mindestversion über `PHP_MIN_VERSION` konfigurierbar), Slim 4, MariaDB ≥ 10.11 (PDO), Composer.
 Karte (folgt): OpenLayers, EPSG:25832, **offline-first** – Kartenquellen sind austauschbar (siehe Plan Abschnitt 2a).

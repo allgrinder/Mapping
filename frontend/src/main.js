@@ -2,13 +2,13 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/auth.css';
 import './styles/admin.css';
-import { api, onAuthError, setCsrf } from './api.js';
+import { api, onAuthError, setCsrf, DEMO } from './api.js';
 import { h } from './ui/dom.js';
 import { renderLogin } from './views/login.js';
 import { renderPasswordChange } from './views/password.js';
 import { renderAdmin } from './views/admin.js';
 import { renderMapPage } from './views/mapPage.js';
-import { applyTheme } from './ui/theme.js';
+import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
 import './styles/map.css';
 
 const root = document.getElementById('app');
@@ -16,6 +16,21 @@ let me = null;
 let cleanup = null;
 
 applyTheme();
+
+if (DEMO) {
+  const reset = h('button', { class: 'btn btn-plain btn-sm', type: 'button' }, 'Zurücksetzen');
+  reset.addEventListener('click', async () => {
+    const { resetDemo } = await import('./demo/server.js');
+    resetDemo();
+    location.hash = '#/login';
+    location.reload();
+  });
+  const badge = h('div', { class: 'glass demo-badge kl', role: 'note' }, h('strong', {}, 'Demo'), h('span', {}, 'Daten nur in diesem Browser'), reset);
+  const paint = (dark) => { badge.classList.toggle('kl-dark', dark); badge.classList.toggle('kl-light', !dark); };
+  paint(isDark());
+  onThemeChange(paint);
+  document.body.append(badge);
+}
 
 const navigate = (hash) => { if (location.hash === hash) route(); else location.hash = hash; };
 

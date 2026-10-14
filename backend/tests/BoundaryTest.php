@@ -89,7 +89,7 @@ final class BoundaryTest extends TestCase
     public function testInvalidCodeAbortsImport(): void
     {
         $this->expectExceptionMessage('Unerwarteter Gebietsschlüssel');
-        $this->importer->normalizeCode('09162000', 'kreis');
+        BoundaryImporter::normalizeCode('09162000', 'kreis');
     }
 
     public function testBoundaryApiServesGeoJsonWithEtag(): void
