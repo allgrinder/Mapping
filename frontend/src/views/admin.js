@@ -2,6 +2,7 @@ import { api, ApiError } from '../api.js';
 import { h, svg, initials, formatDateTime } from '../ui/dom.js';
 import { UI, SYMBOLS, SYMBOL_LABELS, PALETTE, CATEGORY_SYMBOLS, SCENARIO_SYMBOLS } from '../ui/icons.js';
 import { confirmDialog, secretDialog, toast } from '../ui/dialog.js';
+import { renderImportExport } from './importExport.js';
 
 const TABS = {
   benutzer: { label: 'Benutzer' },
@@ -13,6 +14,7 @@ const TABS = {
     label: 'Krisenszenarien', api: '/scenarios', add: 'Szenario hinzufügen', symbols: SCENARIO_SYMBOLS,
     sub: 'Szenarien stehen beim Anlegen einer Einrichtung als Markierung „gefährdet bei“ zur Auswahl.',
   },
+  daten: { label: 'Import & Export' },
 };
 
 const chevron = () => svg(UI.down, { size: 14, stroke: 2.4 });
@@ -39,7 +41,9 @@ export async function renderAdmin(root, { me, tab, navigate }) {
         navBtn('benutzer', UI.users),
         h('div', { class: 'cap gap' }, 'Stammdaten'),
         navBtn('kategorien', UI.grid),
-        navBtn('szenarien', UI.triangle)),
+        navBtn('szenarien', UI.triangle),
+        h('div', { class: 'cap gap' }, 'Daten'),
+        navBtn('daten', UI.download)),
       main)));
 
   const notice = h('div');
@@ -53,7 +57,9 @@ export async function renderAdmin(root, { me, tab, navigate }) {
     counts.szenarien.textContent = state.szenarien.length;
   };
 
-  const rerender = () => (tab === 'benutzer' ? renderUsers() : renderMaster());
+  const rerender = () => (tab === 'benutzer' ? renderUsers() : tab === 'daten'
+    ? renderImportExport(main, { categories: state.kategorien, scenarios: state.szenarien, onChanged: load })
+    : renderMaster());
 
   // ---------------- Benutzer ----------------
   function renderUsers() {

@@ -20,6 +20,8 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "ol": "^10.11.0",
-    "proj4": "^2.22.0"
+    "proj4": "^2.22.0",
+    "read-excel-file": "^9.3.12",
+    "write-excel-file": "^4.1.1"
   }
 }

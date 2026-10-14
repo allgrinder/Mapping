@@ -8,6 +8,7 @@ import { createFacilityLayer } from '../map/facilityLayer.js';
 import { applyFilters, isFiltered, formatAddress, formatCoord } from '../facilities.js';
 import { themeColors } from '../map/styles.js';
 import { startPolling, affected, countBySource, fmtTime } from '../warnings.js';
+import { exportFacilities } from './importExport.js';
 
 const chevron = () => svg(UI.down, { size: 14, stroke: 2.4 });
 
@@ -86,6 +87,17 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
     navigate('#/karte');
   });
   const list = h('div', { class: 'sb-list hits', role: 'list' });
+  const exportBtn = h('button', { class: 'btn btn-plain btn-sm icon-only', type: 'button', title: 'Angezeigte Einrichtungen als Excel exportieren', 'aria-label': 'Angezeigte Einrichtungen als Excel exportieren' },
+    svg(UI.download, { size: 16, stroke: 2.2 }));
+  exportBtn.addEventListener('click', async () => {
+    if (!shown.length) return;
+    exportBtn.disabled = true;
+    try {
+      await exportFacilities(shown, { categories, scenarios, format: 'xlsx', label: shown.length === all.length ? 'Bestand' : 'Auswahl' });
+    } catch {
+      toast(notice, 'Export fehlgeschlagen.', 'err');
+    } finally { exportBtn.disabled = false; }
+  });
 
   const sidebar = h('aside', { class: 'glass sidebar', 'aria-label': 'Suche und Filter' },
     h('div', { class: 'sb-head' },
@@ -104,7 +116,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
           v ? map.zoomToBoundary('regbez', v) : map.fitNrw(300);
         })),
       moreBtn, more),
-    h('div', { class: 'sb-count' }, countLabel, resetBtn),
+    h('div', { class: 'sb-count' }, countLabel, h('span', { class: 'sb-count-actions' }, resetBtn, exportBtn)),
     list);
 
   // ---------- Leerzustand ----------
@@ -238,6 +250,7 @@ export async function renderMapPage(root, { me, onLogout, selectId = null, navig
     facLayer.setItems(shown);
     countLabel.textContent = `${shown.length} ${shown.length === 1 ? 'Einrichtung' : 'Einrichtungen'}${shown.length !== all.length ? ` von ${all.length}` : ''}`;
     resetBtn.hidden = !isFiltered(filters, categories.map((c) => c.id));
+    exportBtn.hidden = shown.length === 0;
     if (all.length === 0) {
       list.replaceChildren(h('div', { class: 'ghost-row' }), h('div', { class: 'ghost-row', style: { opacity: '.7' } }), h('div', { class: 'ghost-row', style: { opacity: '.4' } }));
     } else if (shown.length === 0) {

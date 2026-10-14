@@ -7,6 +7,7 @@ import proj4 from 'proj4';
 import '../map/projection.js';
 import turfBuffer from '@turf/buffer';
 import { SAMPLES } from './samples.js';
+import { facilityKey } from '../import/core.js';
 
 const KEY = 'kl-demo-v1';
 const SYMBOLS = ['cap', 'cross', 'flask', 'box', 'building', 'shield', 'wave', 'rain', 'fire', 'wind', 'power', 'hazard'];
@@ -200,6 +201,9 @@ export async function handle(method, path, body) {
     case 'facilities':
       if (rest === 'hints') { requireUser('admin'); return demoHints(body); }
       return facilities(method, rest, body);
+    case 'import':
+      if (rest === 'commit' && method === 'POST') return importCommit(body);
+      break;
     case 'situation': requireUser(); return situation(body?.definition, body?.bufferM ?? 0);
     case 'warnings': requireUser(); return demoWarnings();
     case 'events': return events(method, rest, body);
@@ -303,6 +307,52 @@ async function facilities(method, rest, body) {
     return { ok: true };
   }
   return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
+}
+
+// Wie POST /api/import/commit im Backend: jede Zeile prüfen, Dubletten ablehnen, alles oder nichts.
+async function importCommit(body) {
+  const actor = requireUser('admin');
+  const rows = body?.rows;
+  if (!Array.isArray(rows) || !rows.length) fail(422, 'validation_failed', 'Keine Zeilen zum Import.', { rows: 'Keine Zeilen zum Import.' });
+  if (rows.length > 5000) fail(422, 'validation_failed', 'Höchstens 5000 Zeilen je Import.', { rows: 'Zu viele Zeilen.' });
+  const errors = [];
+  const valid = [];
+  const seenKey = new Map();
+  const seenExt = new Map();
+  for (const [i, r] of rows.entries()) {
+    const line = Number.isInteger(r?.row) ? r.row : i + 1;
+    if (!r?.data || !['create', 'update'].includes(r.action)) { errors.push({ row: line, fields: { _: 'Ungültiger Zeilenaufbau.' } }); continue; }
+    const target = r.action === 'update' ? db.facilities.find((f) => f.id === r.id) : null;
+    if (r.action === 'update' && !target) { errors.push({ row: line, fields: { _: 'Zu aktualisierende Einrichtung existiert nicht (mehr).' } }); continue; }
+    let v;
+    try { v = await validateFacility(r.data); } catch (e) { errors.push({ row: line, fields: Object.keys(e.fields || {}).length ? e.fields : { _: e.message } }); continue; }
+    const key = facilityKey(v.name, v.address.zip, v.address.street);
+    const ext = r.data.externalId || null;
+    let dup = null;
+    if (seenKey.has(key) || (ext && seenExt.has(ext))) dup = `Doppelt in der Datei (Zeile ${seenKey.get(key) ?? seenExt.get(ext)}).`;
+    else if (r.action === 'create') {
+      const hit = db.facilities.find((f) => facilityKey(f.name, f.address.zip, f.address.street) === key || (ext && f.externalId === ext));
+      if (hit) dup = `Dublette zu bestehender Einrichtung #${hit.id}.`;
+    }
+    if (dup) { errors.push({ row: line, fields: { _: dup }, duplicate: true }); continue; }
+    seenKey.set(key, line);
+    if (ext) seenExt.set(ext, line);
+    valid.push([target, v, ext]);
+  }
+  if (errors.length) {
+    const err = new ApiError(422, 'import_invalid', `${errors.length} Zeile(n) fehlerhaft – es wurde nichts importiert.`);
+    err.rows = errors;
+    throw err;
+  }
+  const batchId = 'imp-demo-' + Date.now();
+  let created = 0, updated = 0;
+  for (const [target, v, ext] of valid) {
+    if (target) { Object.assign(target, v, { externalId: ext || target.externalId, updatedAt: now(), updatedById: actor.id }); updated++; }
+    else { db.facilities.push({ id: ++db.seq, ...v, source: 'import', externalId: ext, createdAt: now(), createdById: actor.id, updatedAt: now(), updatedById: actor.id }); created++; }
+  }
+  db.facilitiesChangedAt = now();
+  save();
+  return { batchId, created, updated };
 }
 
 /** Legt die fiktiven Beispiel-Einrichtungen an (nur Demo). */

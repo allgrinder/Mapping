@@ -6,6 +6,8 @@ Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUN
 
 **Stufe 2:** Hochwassergefahrenkarten NRW als zuschaltbare WMS-Ebene (über Proxy, mit Cache) und Hinweise beim Speichern (GetFeatureInfo HQhäufig/HQ100/HQextrem, aktive Warngebiete, Waldbrandindex – nur Vorschläge); Live-Warnlage aus NINA (MoWaS, DWD) und DWD-Waldbrandgefahrenindex mit periodischem Abruf, Statusanzeige je Dienst und Rückfall auf den letzten Stand bei Ausfall.
 
+**Stufe 3:** Import von Einrichtungen aus Excel (.xlsx) oder CSV unter *Administration › Import & Export*: Spaltenzuordnung mit Vorschlag anhand der Überschriften, Prüfung jeder Zeile (Pflichtfelder, Kategorie/Szenarien per Name, PLZ, E-Mail, Koordinaten WGS84 oder UTM 32, Lage in NRW), optionale Standortermittlung über die Adresssuche, Dublettenerkennung gegen Bestand und Datei (ID, externe ID, Name+PLZ+Straße, gleicher Name im Umkreis von 200 m), Vorschau mit Status, Fehlerbericht als CSV, Übernahme nach Bestätigung als Ganzes (Server prüft erneut, alles oder nichts, Protokoll mit Import-Kennung). Export des Bestands als .xlsx/.csv sowie der gefilterten Auswahl direkt aus der Karte; Exportdateien lassen sich wieder einlesen (Spalte „ID“ → Bestand aktualisieren).
+
 ## Demo im Browser (GitHub Pages)
 Bei jedem Push baut `.github/workflows/pages.yml` eine **Demo-Version** und veröffentlicht sie auf GitHub Pages.
 In der Demo läuft statt PHP/MariaDB ein kleiner Ersatz-Server im Browser (`frontend/src/demo/server.js`);
@@ -90,6 +92,13 @@ Die Warnlage wird bei Bedarf höchstens alle `WARNINGS_INTERVAL` Sekunden erneue
 Fällt ein Dienst aus, bleibt der letzte Stand sichtbar und der Status wird angezeigt. Die Layer der Hochwassergefahrenkarten
 werden aus den GetCapabilities ermittelt (HQhäufig/HQ100/HQextrem); bei Bedarf über `HWGK_LAYER_HQ100` usw. festlegen.
 
+## Import & Export (Stufe 3)
+- Formate: `.xlsx` (Excel 2007+) und CSV (Trennzeichen `;` `,` Tab, UTF-8 oder Windows-1252). Altes `.xls` bitte vorher in Excel als `.xlsx` speichern.
+- Höchstens 5000 Zeilen je Import (`ImportController::MAX_ROWS`), Datei bis 15 MB. Die Datei wird nur im Browser gelesen; an den Server gehen ausschließlich die geprüften Datensätze als JSON.
+- Eine Vorlage mit den Spalten und den gültigen Kategorien/Szenarien gibt es unter *Vorlage herunterladen*.
+- Dubletten: wahlweise überspringen oder den Bestand überschreiben. Neue Zeilen, die serverseitig auf einen vorhandenen Schlüssel treffen, werden abgelehnt.
+- Exportiert werden Werte, nie Formeln; CSV-Zellen, die mit `= + - @` beginnen, werden maskiert.
+
 ## Wichtige Umgebungsvariablen
 | Variable | Standard | Bedeutung |
 |---|---|---|
@@ -114,4 +123,4 @@ cd backend && composer install && vendor/bin/phpunit
 ```
 Frontend: `cd frontend && npm test`.
 
-Geprüft werden u. a. Login, Sitzungshärtung, CSRF, Ratenbegrenzung, Passwortwechsel, Eingabevalidierung/SQL-Injection und die Rechtematrix (Route × anonym/lesen/admin), Stammdaten-Pflege (Reihenfolge, Löschschutz bei Verwendung).
+Geprüft werden u. a. Login, Sitzungshärtung, CSRF, Ratenbegrenzung, Passwortwechsel, Eingabevalidierung/SQL-Injection und die Rechtematrix (Route × anonym/lesen/admin), Stammdaten-Pflege (Reihenfolge, Löschschutz bei Verwendung). Außerdem Geo-Abfragen (Gebietszuordnung, Lagemodus, Puffer), Warnlage/Hochwasser mit Testdoubles sowie der Import (alles oder nichts, Dubletten, Fehler je Zeile) und im Frontend CSV-Lesen, Spaltenzuordnung, Zeilenprüfung und Dublettenerkennung.

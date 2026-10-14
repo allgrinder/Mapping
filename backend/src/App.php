@@ -6,6 +6,7 @@ namespace Kritis;
 use Kritis\Controller\AuthController;
 use Kritis\Controller\FacilityController;
 use Kritis\Controller\HazardController;
+use Kritis\Controller\ImportController;
 use Kritis\Geo\FloodService;
 use Kritis\Geo\WarningService;
 use Kritis\Controller\GeocodeController;
@@ -59,6 +60,7 @@ final class App
         $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http);
         $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache', $services);
         $facilities = new FacilityController($db, new AdminResolver($db));
+        $import = new ImportController($db, $facilities);
         $geocode = new GeocodeController($services['geocoding'], $http, $config->get('storage') . '/cache');
         $situation = new SituationController($db, new SituationService($db));
         $cache = $config->get('storage') . '/cache';
@@ -69,7 +71,7 @@ final class App
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $situation, $hazards, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $import, $geocode, $situation, $hazards, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -96,6 +98,7 @@ final class App
             $g->delete('/facilities/{id:[0-9]+}', [$facilities, 'delete'])->add($admin());
             $g->get('/geo/resolve', [$facilities, 'resolve'])->add($any());
             $g->get('/geocode', [$geocode, 'search'])->add($admin());
+            $g->post('/import/commit', [$import, 'commit'])->add($admin());
 
             $g->post('/situation/query', [$situation, 'query'])->add($any());
             $g->get('/warnings', [$hazards, 'warnings'])->add($any());
@@ -114,7 +117,7 @@ final class App
                 $g->put("/$path/{id:[0-9]+}", [$ctl, 'update'])->add($admin());
                 $g->delete("/$path/{id:[0-9]+}", [$ctl, 'delete'])->add($admin());
             }
-        })->add(new CsrfMiddleware())->add(new JsonBodyMiddleware());
+        })->add(new CsrfMiddleware())->add(new JsonBodyMiddleware(8_000_000)); // Import: bis 5000 Zeilen
 
         // Reihenfolge (zuletzt hinzugefügt = äußerste Schicht): Headers → Session → Fehler → Routing
         $app->addRoutingMiddleware();

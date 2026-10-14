@@ -62,6 +62,7 @@ export async function api(method, path, body) {
   if (!res.ok) {
     const e = data?.error || {};
     const err = new ApiError(res.status, e.code || 'http_' + res.status, e.message || 'Unbekannter Fehler.', e.fields || {});
+    if (Array.isArray(e.rows)) err.rows = e.rows;
     if (e.code === 'unauthenticated' || e.code === 'password_change_required') listeners.forEach((fn) => fn(err));
     throw err;
   }

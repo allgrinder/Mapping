@@ -77,14 +77,8 @@ final class FacilityController
     public function create(Request $req, Response $res): Response
     {
         $data = $this->validate((array) $req->getParsedBody());
-        $actor = $req->getAttribute('user')['id'];
         $this->db->beginTransaction();
-        $this->db->prepare('INSERT INTO facilities (name, category_id, street, zip, city, location, regbez, kreis, gemeinde, plz5,
-            contact_person, contact_function, contact_phone, contact_email, note, normalized_key, external_id, source, import_batch_id, created_by, updated_by)
-            VALUES (?,?,?,?,?, ST_GeomFromText(?), ?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?)')
-            ->execute([...$this->columns($data), $data['externalId'], $data['source'], $data['importBatchId'], $actor, $actor]);
-        $id = (int) $this->db->lastInsertId();
-        $this->saveHazards($id, $data['hazards']);
+        $id = $this->insert($data, (int) $req->getAttribute('user')['id']);
         $this->db->commit();
         return Json::respond($res, $this->find($id), 201);
     }
@@ -95,11 +89,7 @@ final class FacilityController
         $this->find($id);
         $data = $this->validate((array) $req->getParsedBody());
         $this->db->beginTransaction();
-        $this->db->prepare('UPDATE facilities SET name = ?, category_id = ?, street = ?, zip = ?, city = ?, location = ST_GeomFromText(?),
-            regbez = ?, kreis = ?, gemeinde = ?, plz5 = ?, contact_person = ?, contact_function = ?, contact_phone = ?, contact_email = ?,
-            note = ?, normalized_key = ?, updated_at = UTC_TIMESTAMP(), updated_by = ? WHERE id = ?')
-            ->execute([...$this->columns($data), $req->getAttribute('user')['id'], $id]);
-        $this->saveHazards($id, $data['hazards']);
+        $this->store($id, $data, (int) $req->getAttribute('user')['id']);
         $this->db->commit();
         return Json::respond($res, $this->find($id));
     }
@@ -182,6 +172,28 @@ final class FacilityController
             throw new HttpException(422, 'validation_failed', 'Eingaben ungültig.', ['location' => 'Der Standort liegt außerhalb von Nordrhein-Westfalen.']);
         }
         return $d + ['admin' => $adm];
+    }
+
+    /** Legt eine validierte Einrichtung an (Transaktion übernimmt der Aufrufer). */
+    public function insert(array $data, int $actor): int
+    {
+        $this->db->prepare('INSERT INTO facilities (name, category_id, street, zip, city, location, regbez, kreis, gemeinde, plz5,
+            contact_person, contact_function, contact_phone, contact_email, note, normalized_key, external_id, source, import_batch_id, created_by, updated_by)
+            VALUES (?,?,?,?,?, ST_GeomFromText(?), ?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?)')
+            ->execute([...$this->columns($data), $data['externalId'], $data['source'], $data['importBatchId'], $actor, $actor]);
+        $id = (int) $this->db->lastInsertId();
+        $this->saveHazards($id, $data['hazards']);
+        return $id;
+    }
+
+    /** Überschreibt eine bestehende Einrichtung mit validierten Daten; eine externe ID aus dem Import wird übernommen. */
+    public function store(int $id, array $data, int $actor): void
+    {
+        $this->db->prepare('UPDATE facilities SET name = ?, category_id = ?, street = ?, zip = ?, city = ?, location = ST_GeomFromText(?),
+            regbez = ?, kreis = ?, gemeinde = ?, plz5 = ?, contact_person = ?, contact_function = ?, contact_phone = ?, contact_email = ?,
+            note = ?, normalized_key = ?, external_id = COALESCE(?, external_id), updated_at = UTC_TIMESTAMP(), updated_by = ? WHERE id = ?')
+            ->execute([...$this->columns($data), $data['externalId'], $actor, $id]);
+        $this->saveHazards($id, $data['hazards']);
     }
 
     private function columns(array $d): array

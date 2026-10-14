@@ -334,3 +334,5 @@ a.hit { text-decoration: none; }
 .wl-sdot.ok { background: var(--ok); }
 .wl-sdot.err { background: var(--danger); }
 .wl-note { line-height: 1.5; }
+.sb-count-actions { display: inline-flex; align-items: center; gap: 2px; }
+.btn.icon-only { padding: 0 8px; }

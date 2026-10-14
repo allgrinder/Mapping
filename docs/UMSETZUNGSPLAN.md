@@ -102,7 +102,7 @@ Es kann sein, dass im Betrieb **gar kein Internetzugriff** möglich ist. Deshalb
 | Warnungen (St. 2) | `GET /warnings` (aggregiert + Status je Dienst), `GET /warnings/status` | lesen |
 | Benutzer | `GET/POST/PUT/DELETE /users`, `POST /users/{id}/reset-password` | admin |
 | Betrieb | `GET /health` | – |
-| Import (St. 3) | `POST /import/preview`, `POST /import/commit`, `GET /facilities/export.xlsx|csv` | admin |
+| Import (St. 3) | `POST /import/commit` (Lesen, Zuordnen, Vorprüfung und Export laufen im Browser) | admin |
 
 Der Proxy akzeptiert nur Schlüssel aus der Konfiguration, niemals frei übergebene URLs (SSRF-Schutz).
 
@@ -136,3 +136,4 @@ Der Proxy akzeptiert nur Schlüssel aus der Konfiguration, niemals frei übergeb
 - **PLZ-Filter:** Das Design zeigt „PLZ von/bis“, die Anforderung nennt einen Präfix („41“). Umgesetzt ist ein Präfixfeld „PLZ-Bereich (Anfang der PLZ)“.
 - **Grenzdaten:** Import aus lokalen Dateien (DVG-Shape-ZIP, PLZ-GeoJSON); DVG-Schlüssel (`KN`) werden auf AGS-Länge der Ebene gekürzt (RB 3, Kreis 5, Gemeinde 8 Stellen). Ohne `dvg2bld` wird die Landesfläche aus den Regierungsbezirken vereinigt.
 - **Kachelraster:** eigenes EPSG:25832-Raster (Ursprung 270000/5850000, 256 px, 12 Stufen) – gemeinsam für Cache, Vorabladen und Druck.
+- **Import/Export (Stufe 3):** Datei lesen, Spaltenzuordnung, Vorprüfung, Dublettenerkennung, Vorschau, Fehlerbericht und Export laufen im Browser (`read-excel-file`/`write-excel-file`, lokal gebündelt). Der Server bekommt nur geprüfte Datensätze (`POST /import/commit`), validiert jede Zeile erneut mit den Formularregeln, prüft Dubletten über `normalized_key`/`external_id` und schreibt in einer Transaktion (alles oder nichts). Kein separater Preview-Endpunkt und keine Upload-Dateien auf dem Server – weniger Angriffsfläche. Kategorien/Szenarien werden auch über eindeutige Namensteile erkannt („Archive“ → „Archive (inkl. Landesarchiv)“), mit Hinweis in der Vorschau.
