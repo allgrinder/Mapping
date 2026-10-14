@@ -18,13 +18,14 @@ final class Seeder
         ['Archive (inkl. Landesarchiv)', '#A8620A', 'box'],
     ];
     public const SCENARIOS = [
-        ['Hochwasser', '#2F6FDE', 'wave'],
-        ['Starkregen', '#1F7A8C', 'rain'],
-        ['Waldbrand', '#C2410C', 'fire'],
-        ['Sturm', '#5B6472', 'wind'],
-        ['Langanhaltender Stromausfall', '#A16207', 'power'],
-        ['Gefahrstoffunfall', '#7A4BD6', 'hazard'],
-        ['Cyberangriff', '#334155', 'shield'],
+        // 4. Wert: flächig – betrifft im Lagemodus alle Einrichtungen im Gebiet, nicht nur als gefährdet markierte
+        ['Hochwasser', '#2F6FDE', 'wave', false],
+        ['Starkregen', '#1F7A8C', 'rain', false],
+        ['Waldbrand', '#C2410C', 'fire', false],
+        ['Sturm', '#5B6472', 'wind', false],
+        ['Langanhaltender Stromausfall', '#A16207', 'power', true],
+        ['Gefahrstoffunfall', '#7A4BD6', 'hazard', false],
+        ['Cyberangriff', '#334155', 'shield', true],
     ];
 
     public function __construct(private PDO $db, private PasswordHasher $hasher)
@@ -34,11 +35,13 @@ final class Seeder
     /** @return string|null Initialpasswort des neu angelegten Admins, sonst null */
     public function run(string $adminUser = 'admin'): ?string
     {
-        foreach (['categories' => self::CATEGORIES, 'scenarios' => self::SCENARIOS] as $table => $rows) {
-            $st = $this->db->prepare("INSERT IGNORE INTO $table (name, color, symbol, sort_order) VALUES (?,?,?,?)");
-            foreach ($rows as $i => [$name, $color, $symbol]) {
-                $st->execute([$name, $color, $symbol, ($i + 1) * 10]);
-            }
+        $st = $this->db->prepare('INSERT IGNORE INTO categories (name, color, symbol, sort_order) VALUES (?,?,?,?)');
+        foreach (self::CATEGORIES as $i => [$name, $color, $symbol]) {
+            $st->execute([$name, $color, $symbol, ($i + 1) * 10]);
+        }
+        $st = $this->db->prepare('INSERT IGNORE INTO scenarios (name, color, symbol, area_wide, sort_order) VALUES (?,?,?,?,?)');
+        foreach (self::SCENARIOS as $i => [$name, $color, $symbol, $areaWide]) {
+            $st->execute([$name, $color, $symbol, (int) $areaWide, ($i + 1) * 10]);
         }
         $has = $this->db->prepare('SELECT 1 FROM users WHERE username = ?');
         $has->execute([$adminUser]);

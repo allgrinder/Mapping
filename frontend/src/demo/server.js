@@ -11,12 +11,13 @@ import { facilityKey } from '../import/core.js';
 
 const KEY = 'kl-demo-v1';
 const SYMBOLS = ['cap', 'cross', 'flask', 'box', 'building', 'shield', 'wave', 'rain', 'fire', 'wind', 'power', 'hazard'];
+const AREA_WIDE = ['Langanhaltender Stromausfall', 'Cyberangriff'];
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 
 function seed() {
   const cat = [['Hochschulen', '#2F6FDE', 'cap'], ['Universitätskliniken', '#D0364F', 'cross'], ['Außeruniversitäre Forschungseinrichtungen', '#7A4BD6', 'flask'], ['Archive (inkl. Landesarchiv)', '#A8620A', 'box']];
   const scen = [['Hochwasser', '#2F6FDE', 'wave'], ['Starkregen', '#1F7A8C', 'rain'], ['Waldbrand', '#C2410C', 'fire'], ['Sturm', '#5B6472', 'wind'], ['Langanhaltender Stromausfall', '#A16207', 'power'], ['Gefahrstoffunfall', '#7A4BD6', 'hazard'], ['Cyberangriff', '#334155', 'shield']];
-  const md = (list) => list.map(([name, color, symbol], i) => ({ id: i + 1, name, color, symbol, sortOrder: (i + 1) * 10, active: true, updatedAt: now() }));
+  const md = (list, wide) => list.map(([name, color, symbol], i) => ({ id: i + 1, name, color, symbol, sortOrder: (i + 1) * 10, active: true, ...(wide ? { areaWide: AREA_WIDE.includes(name) } : {}), updatedAt: now() }));
   return {
     seq: 100,
     sessionUser: null,
@@ -25,14 +26,22 @@ function seed() {
       { id: 2, username: 'leser', displayName: 'Demo-Lesezugriff', password: 'demo', role: 'lesen', active: true, mustChangePassword: false, lastLoginAt: null, createdAt: now(), updatedAt: now() },
     ],
     categories: md(cat),
-    scenarios: md(scen),
+    scenarios: md(scen, true),
     facilities: [],
   };
 }
 
 let db = load();
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.users) { s.facilities ??= []; return s; } } catch { /* neu anlegen */ }
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s?.users) {
+      s.facilities ??= [];
+      // ältere Demo-Stände: Kennzeichen „flächig“ nachtragen (wie Migration 005)
+      for (const x of s.scenarios) x.areaWide ??= AREA_WIDE.includes(x.name);
+      return s;
+    }
+  } catch { /* neu anlegen */ }
   return seed();
 }
 function save() {
@@ -78,6 +87,7 @@ function masterData(kind, method, rest, body, actor) {
     if (typeof body?.name !== 'string' || body.name.trim().length < 2) errs.name = 'Länge muss zwischen 2 und 120 Zeichen liegen.';
     if (!/^#[0-9a-f]{6}$/i.test(body?.color || '')) errs.color = 'Ungültiges Format.';
     if (!SYMBOLS.includes(body?.symbol)) errs.symbol = 'Ungültiger Wert.';
+    if (body?.areaWide !== undefined && typeof body.areaWide !== 'boolean') errs.areaWide = 'Wahrheitswert erwartet.';
     if (Object.keys(errs).length) fail(422, 'validation_failed', 'Eingaben ungültig.', errs);
   };
   const dup = (name, id) => list.some((x) => x.name === name && x.id !== id) && fail(409, 'conflict', 'Der Name ist bereits vergeben.', { name: 'Der Name ist bereits vergeben.' });
@@ -89,7 +99,7 @@ function masterData(kind, method, rest, body, actor) {
   requireUser('admin');
   if (method === 'POST' && !rest) {
     validate(); dup(body.name.trim());
-    const item = { id: ++db.seq, name: body.name.trim(), color: body.color.toUpperCase(), symbol: body.symbol, active: body.active !== false, sortOrder: Math.max(0, ...list.map((x) => x.sortOrder)) + 10, updatedAt: now() };
+    const item = { id: ++db.seq, name: body.name.trim(), color: body.color.toUpperCase(), symbol: body.symbol, active: body.active !== false, sortOrder: Math.max(0, ...list.map((x) => x.sortOrder)) + 10, ...(kind === 'scenarios' ? { areaWide: body.areaWide === true } : {}), updatedAt: now() };
     list.push(item); save();
     return { id: item.id };
   }
@@ -104,6 +114,7 @@ function masterData(kind, method, rest, body, actor) {
   if (method === 'PUT') {
     validate(); dup(body.name.trim(), item.id);
     Object.assign(item, { name: body.name.trim(), color: body.color.toUpperCase(), symbol: body.symbol, active: body.active !== false, updatedAt: now() });
+    if (kind === 'scenarios' && typeof body.areaWide === 'boolean') item.areaWide = body.areaWide;
     save();
     return { ok: true };
   }
@@ -204,7 +215,7 @@ export async function handle(method, path, body) {
     case 'import':
       if (rest === 'commit' && method === 'POST') return importCommit(body);
       break;
-    case 'situation': requireUser(); return situation(body?.definition, body?.bufferM ?? 0);
+    case 'situation': requireUser(); return situation(body?.definition, body?.bufferM ?? 0, body?.scenarioId ?? null);
     case 'warnings': requireUser(); return demoWarnings();
     case 'events': return events(method, rest, body);
     case 'geo':
@@ -394,7 +405,10 @@ async function buildArea(def) {
   return bad('Unbekannter Gebietstyp.');
 }
 
-async function situation(def, bufferM) {
+async function situation(def, bufferM, scenarioId = null) {
+  if (scenarioId !== null && !Number.isInteger(scenarioId)) fail(422, 'validation_failed', 'Ungültiges Szenario.', { scenarioId: 'Ungültiges Szenario.' });
+  const sc = scenarioId === null ? null : db.scenarios.find((x) => x.id === scenarioId) || fail(422, 'validation_failed', 'Unbekanntes Szenario.', { scenarioId: 'Unbekanntes Szenario.' });
+  const scenario = sc ? { id: sc.id, name: sc.name, areaWide: Boolean(sc.areaWide) } : null;
   if (typeof bufferM !== 'number' || bufferM < 0 || bufferM > 50000) fail(422, 'validation_failed', 'Die Pufferzone muss zwischen 0 und 50 km liegen.', { bufferM: 'Ungültig.' });
   const a = await buildArea(def);
   const buffer = bufferM > 0 ? turfBuffer({ type: 'Feature', properties: {}, geometry: a.area }, bufferM / 1000, { units: 'kilometers', steps: 16 })?.geometry : null;
@@ -403,21 +417,26 @@ async function situation(def, bufferM) {
   const inArea = all.filter((f) => pointInGeometry([f.location.lon, f.location.lat], a.area)).sort(byLat);
   const ids = new Set(inArea.map((f) => f.id));
   const inBuffer = buffer ? all.filter((f) => !ids.has(f.id) && pointInGeometry([f.location.lon, f.location.lat], buffer)).sort(byLat) : [];
-  return { definition: a.definition, label: a.label, bufferM, area: a.area, buffer, inArea, inBuffer };
+  const rate = (list) => {
+    for (const f of list) f.atRisk = scenario ? scenario.areaWide || f.hazards.includes(scenario.id) : null;
+    return scenario ? [...list.filter((f) => f.atRisk), ...list.filter((f) => !f.atRisk)] : list;
+  };
+  return { definition: a.definition, label: a.label, bufferM, scenario, area: a.area, buffer, inArea: rate(inArea), inBuffer: rate(inBuffer) };
 }
 
 async function events(method, rest, body) {
   const actor = requireUser();
   db.events ??= [];
-  const slim = (f) => ({ id: f.id, name: f.name, categoryId: f.categoryId, address: f.address, location: f.location, admin: f.admin, hazards: f.hazards, contact: f.contact });
+  const slim = (f) => ({ id: f.id, name: f.name, categoryId: f.categoryId, address: f.address, location: f.location, admin: f.admin, hazards: f.hazards, contact: f.contact, atRisk: f.atRisk });
   const present = (e) => ({ ...structuredClone(e), createdBy: db.users.find((u) => u.id === e.createdById)?.username, updatedBy: db.users.find((u) => u.id === e.updatedById)?.username });
   const store = async (e) => {
     if (typeof body?.name !== 'string' || body.name.trim().length < 2) fail(422, 'validation_failed', 'Eingaben ungültig.', { name: 'Länge muss zwischen 2 und 200 Zeichen liegen.' });
-    const r = await situation(body.definition, body.bufferM ?? 0);
-    Object.assign(e, { name: body.name.trim(), bufferM: r.bufferM, definition: r.definition, snapshot: { label: r.label, takenAt: now(), inArea: r.inArea.map(slim), inBuffer: r.inBuffer.map(slim) }, updatedAt: now(), updatedById: actor.id });
+    const r = await situation(body.definition, body.bufferM ?? 0, body.scenarioId ?? null);
+    Object.assign(e, { name: body.name.trim(), scenarioId: r.scenario?.id ?? null, bufferM: r.bufferM, definition: r.definition, snapshot: { label: r.label, scenario: r.scenario, takenAt: now(), inArea: r.inArea.map(slim), inBuffer: r.inBuffer.map(slim) }, updatedAt: now(), updatedById: actor.id });
     return e;
   };
-  if (method === 'GET' && !rest) return { items: [...db.events].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1)).map((e) => ({ id: e.id, name: e.name, occurredAt: e.occurredAt, bufferM: e.bufferM, label: e.snapshot.label, counts: { inArea: e.snapshot.inArea.length, inBuffer: e.snapshot.inBuffer.length }, createdAt: e.createdAt, createdBy: present(e).createdBy })) };
+  if (method === 'GET' && !rest) return { items: [...db.events].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1)).map((e) => ({ id: e.id, name: e.name, occurredAt: e.occurredAt, bufferM: e.bufferM, scenarioId: e.scenarioId ?? null, scenarioName: db.scenarios.find((x) => x.id === e.scenarioId)?.name ?? null, label: e.snapshot.label,
+    counts: { inArea: e.snapshot.inArea.length, inBuffer: e.snapshot.inBuffer.length, atRisk: e.scenarioId ? [...e.snapshot.inArea, ...e.snapshot.inBuffer].filter((f) => f.atRisk).length : null }, createdAt: e.createdAt, createdBy: present(e).createdBy })) };
   if (method === 'POST' && !rest) {
     const e = await store({ id: ++db.seq, occurredAt: now(), createdAt: now(), createdById: actor.id });
     db.events.push(e); save();

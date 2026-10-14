@@ -93,8 +93,8 @@ export function createFacilityLayer(map, { categories, onSelect, colors, cluster
         if (highlight) {
           const hl = highlight.get(m.getId());
           if (!hl) return markerStyle(cat, false, true);
-          const key = `${cat?.id}|${hl.zone}|${hl.num}`;
-          if (!hlCache.has(key)) hlCache.set(key, new Style({ image: new Icon({ src: affectedMarkerSvg(cat?.color || '#5B6472', cat?.symbol, hl.zone, hl.num), anchor: [17, 23], anchorXUnits: 'pixels', anchorYUnits: 'pixels' }), zIndex: hl.zone === 'A' ? 30 : 20 }));
+          const key = `${cat?.id}|${hl.zone}|${hl.num}|${hl.muted ? 1 : 0}`;
+          if (!hlCache.has(key)) hlCache.set(key, new Style({ image: new Icon({ src: affectedMarkerSvg(cat?.color || '#5B6472', cat?.symbol, hl.zone, hl.num, hl.muted), anchor: [17, 23], anchorXUnits: 'pixels', anchorYUnits: 'pixels' }), zIndex: (hl.zone === 'A' ? 30 : 20) - (hl.muted ? 15 : 0) }));
           return hlCache.get(key);
         }
         const base = markerStyle(cat, m.getId() === selectedId, false);
@@ -134,7 +134,7 @@ export function createFacilityLayer(map, { categories, onSelect, colors, cluster
       }));
     },
     select(id) { selectedId = id; layer.changed(); },
-    /** @param {Map<number,{zone:'A'|'B',num:number}>|null} m */
+    /** @param {Map<number,{zone:'A'|'B',num:number,muted?:boolean}>|null} m */
     setHighlight(m) { highlight = m; layer.changed(); },
     setWarned(ids) { warned = new Set(ids); layer.changed(); },
     layer,

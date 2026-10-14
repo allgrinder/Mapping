@@ -336,3 +336,14 @@ a.hit { text-decoration: none; }
 .wl-note { line-height: 1.5; }
 .sb-count-actions { display: inline-flex; align-items: center; gap: 2px; }
 .btn.icon-only { padding: 0 8px; }
+/* Lagemodus mit Szenario */
+.scen-hint { font-size: 12px; line-height: 1.4; }
+.zone-muted { background: #8A93A0; opacity: .7; }
+.badge.badge-muted { background: var(--fill-2); color: var(--text-2); box-shadow: none; }
+.res-muted { opacity: .78; }
+.res-more > summary { cursor: pointer; list-style: none; }
+.res-more > summary::-webkit-details-marker { display: none; }
+.res-more > summary::after { content: "▾"; color: var(--text-3); margin-left: 4px; }
+.res-more[open] > summary::after { content: "▴"; }
+details.res-more { display: flex; flex-direction: column; gap: 6px; }
+.lg-muted { width: 18px; height: 18px; border-radius: 50%; background: #2F6FDE; opacity: .55; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px #8A93A0; }

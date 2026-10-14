@@ -5,7 +5,7 @@ import { formatAddress } from '../facilities.js';
 
 const EVENT = [194, 81, 10];
 
-export function buildLagelistePdf({ name, label, bufferM, inArea, inBuffer, catById, scenById, mapImage, user, sources }) {
+export function buildLagelistePdf({ name, label, bufferM, inArea, inBuffer, groups, catById, scenById, mapImage, user, sources }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210;
   const now = new Date();
@@ -20,8 +20,12 @@ export function buildLagelistePdf({ name, label, bufferM, inArea, inBuffer, catB
   doc.setTextColor(17, 19, 24);
   doc.setFont('helvetica', 'bold').setFontSize(18).text(doc.splitTextToSize(name, W - 28), 14, 25);
   doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(63, 70, 81);
+  const sc = groups?.scenario || null;
   const meta = [`Ereignisgebiet: ${label}`, `Pufferzone: ${bufferM > 0 ? `${(bufferM / 1000).toLocaleString('de-DE')} km` : 'keine'}`,
-    `Betroffen: ${inArea.length} im Gebiet${bufferM > 0 ? `, ${inBuffer.length} in der Pufferzone` : ''}`, `Stand: ${stamp}${user ? ` · erstellt von ${user}` : ''}`];
+    ...(sc ? [`Krisenszenario: ${sc.name}${sc.areaWide ? ' (flächig – alle Einrichtungen im Gebiet gelten als gefährdet)' : ''}`,
+      `Gefährdet: ${groups.atRisk}${sc.areaWide ? '' : ` · weitere im Gebiet, nicht für das Szenario markiert: ${groups.others}`}`]
+      : [`Betroffen: ${inArea.length} im Gebiet${bufferM > 0 ? `, ${inBuffer.length} in der Pufferzone` : ''}`]),
+    `Stand: ${stamp}${user ? ` · erstellt von ${user}` : ''}`];
   doc.text(meta, 14, 33);
   let y = 33 + meta.length * 4.6 + 3;
 
@@ -40,7 +44,22 @@ export function buildLagelistePdf({ name, label, bufferM, inArea, inBuffer, catB
     [f.contact.person, f.contact.function].filter(Boolean).join('\n'), [f.contact.phone, f.contact.email].filter(Boolean).join('\n'),
     f.hazards.map((x) => scenById.get(x)?.name).filter(Boolean).join(', '),
   ];
-  const body = [...inArea.map((f, i) => row(f, i + 1, 'Gebiet')), ...inBuffer.map((f, i) => row(f, inArea.length + i + 1, 'Puffer'))];
+  const zoneName = (z) => (z === 'A' ? 'Gebiet' : 'Puffer');
+  // Mit Szenario: Zwischenzeilen je Gruppe (Gefährdet · Gebiet / Puffer, Weitere); ohne: wie bisher Gebiet, dann Puffer
+  const body = [];
+  const muted = new Set();
+  if (groups?.groups?.length) {
+    for (const g of groups.groups) {
+      if (sc) body.push([{ content: `${g.label} (${g.items.length})`, colSpan: 8, styles: { fontStyle: 'bold', fillColor: g.muted ? [238, 240, 243] : [253, 236, 224], textColor: g.muted ? [63, 70, 81] : EVENT } }]);
+      for (const x of g.items) {
+        if (x.muted) muted.add(body.length);
+        body.push(row(x.f, x.num, zoneName(x.zone)));
+      }
+      if (sc && !g.items.length) body.push([{ content: g.empty, colSpan: 8, styles: { textColor: [107, 114, 128] } }]);
+    }
+  } else {
+    body.push(...inArea.map((f, i) => row(f, i + 1, 'Gebiet')), ...inBuffer.map((f, i) => row(f, inArea.length + i + 1, 'Puffer')));
+  }
   autoTable(doc, {
     startY: y,
     head: [['Nr.', 'Zone', 'Einrichtung', 'Kategorie', 'Anschrift', 'Ansprechperson', 'Telefon / E-Mail', 'Gefährdet bei']],
@@ -49,7 +68,11 @@ export function buildLagelistePdf({ name, label, bufferM, inArea, inBuffer, catB
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.6, lineColor: [201, 206, 214], lineWidth: 0.2, textColor: [17, 19, 24], valign: 'top' },
     headStyles: { fillColor: [43, 48, 56], textColor: 255, fontStyle: 'bold' },
     columnStyles: { 0: { cellWidth: 8, halign: 'center', fontStyle: 'bold' }, 1: { cellWidth: 12 }, 2: { cellWidth: 34, fontStyle: 'bold' }, 3: { cellWidth: 22 }, 4: { cellWidth: 30 }, 5: { cellWidth: 26 }, 6: { cellWidth: 32 } },
-    didParseCell: (d) => { if (d.section === 'body' && d.column.index === 1 && d.cell.raw === 'Gebiet') d.cell.styles.textColor = EVENT; },
+    didParseCell: (d) => {
+      if (d.section !== 'body') return;
+      if (muted.has(d.row.index)) d.cell.styles.textColor = [107, 114, 128];
+      else if (d.column.index === 1 && d.cell.raw === 'Gebiet') d.cell.styles.textColor = EVENT;
+    },
     margin: { left: 14, right: 14, bottom: 16 },
   });
 

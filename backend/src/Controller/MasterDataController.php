@@ -38,23 +38,30 @@ final class MasterDataController
 
     public function create(Request $req, Response $res): Response
     {
-        [$name, $color, $symbol, $active] = $this->validate((array) $req->getParsedBody());
+        [$name, $color, $symbol, $active, $areaWide] = $this->validate((array) $req->getParsedBody());
         $this->assertUniqueName($name, null);
         $actor = $req->getAttribute('user')['id'];
         $next = (int) $this->db->query("SELECT COALESCE(MAX(sort_order), 0) + 10 FROM {$this->table}")->fetchColumn();
         $this->db->prepare("INSERT INTO {$this->table} (name, color, symbol, sort_order, active, created_by, updated_by) VALUES (?,?,?,?,?,?,?)")
             ->execute([$name, $color, $symbol, $next, (int) $active, $actor, $actor]);
-        return Json::respond($res, ['id' => (int) $this->db->lastInsertId()], 201);
+        $id = (int) $this->db->lastInsertId();
+        if ($this->table === 'scenarios') {
+            $this->db->prepare('UPDATE scenarios SET area_wide = ? WHERE id = ?')->execute([(int) $areaWide, $id]);
+        }
+        return Json::respond($res, ['id' => $id], 201);
     }
 
     public function update(Request $req, Response $res, array $args): Response
     {
         $id = $this->id($args);
         $this->find($id);
-        [$name, $color, $symbol, $active] = $this->validate((array) $req->getParsedBody());
+        [$name, $color, $symbol, $active, $areaWide] = $this->validate((array) $req->getParsedBody());
         $this->assertUniqueName($name, $id);
         $this->db->prepare("UPDATE {$this->table} SET name = ?, color = ?, symbol = ?, active = ?, updated_at = UTC_TIMESTAMP(), updated_by = ? WHERE id = ?")
             ->execute([$name, $color, $symbol, (int) $active, $req->getAttribute('user')['id'], $id]);
+        if ($this->table === 'scenarios' && $areaWide !== null) {
+            $this->db->prepare('UPDATE scenarios SET area_wide = ? WHERE id = ?')->execute([(int) $areaWide, $id]);
+        }
         return Json::respond($res, ['ok' => true]);
     }
 
@@ -90,7 +97,7 @@ final class MasterDataController
         return Json::respond($res, ['ok' => true]);
     }
 
-    /** @return array{string,string,string,bool} */
+    /** @return array{string,string,string,bool,?bool} areaWide nur bei Szenarien; null = unverändert lassen */
     private function validate(array $data): array
     {
         $v = new Validator($data);
@@ -98,8 +105,9 @@ final class MasterDataController
         $color = $v->string('color', 7, 7, '/^#[0-9A-Fa-f]{6}$/');
         $symbol = $v->enum('symbol', self::SYMBOLS);
         $active = $v->bool('active', true);
+        $areaWide = $this->table === 'scenarios' && array_key_exists('areaWide', $data) ? $v->bool('areaWide', false) : null;
         $v->assertValid();
-        return [$name, strtoupper($color), $symbol, $active];
+        return [$name, strtoupper($color), $symbol, $active, $areaWide];
     }
 
     private function assertUniqueName(string $name, ?int $exceptId): void
@@ -134,6 +142,6 @@ final class MasterDataController
             'id' => (int) $r['id'], 'name' => $r['name'], 'color' => $r['color'], 'symbol' => $r['symbol'],
             'sortOrder' => (int) $r['sort_order'], 'active' => (bool) (int) $r['active'],
             'usageCount' => (int) $r['usage_count'], 'updatedAt' => $r['updated_at'],
-        ];
+        ] + (array_key_exists('area_wide', $r) ? ['areaWide' => (bool) (int) $r['area_wide']] : []);
     }
 }

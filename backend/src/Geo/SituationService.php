@@ -94,9 +94,14 @@ final class SituationService
         return Utm32::geometryToWgs84($g);
     }
 
-    /** @return array{area:array, buffer:?array, label:string, definition:array, bufferM:float, inArea:list<array>, inBuffer:list<array>} */
-    public function query(mixed $definition, mixed $bufferM): array
+    /**
+     * Mit Szenario wird jede Einrichtung bewertet (atRisk): bei flächigen Szenarien (z. B. Stromausfall) alle im Gebiet,
+     * sonst nur die für das Szenario als gefährdet markierten. Gefährdete stehen zuerst. Ohne Szenario: atRisk = null.
+     * @return array{area:array, buffer:?array, label:string, definition:array, bufferM:float, scenario:?array, inArea:list<array>, inBuffer:list<array>}
+     */
+    public function query(mixed $definition, mixed $bufferM, mixed $scenarioId = null): array
     {
+        $scenario = $this->scenario($scenarioId);
         if ($bufferM !== null && !is_int($bufferM) && !is_float($bufferM) || is_numeric($bufferM) && ($bufferM < 0 || $bufferM > self::MAX_BUFFER_M)) {
             throw $this->invalid('bufferM', 'Die Pufferzone muss zwischen 0 und 50 km liegen.');
         }
@@ -122,7 +127,36 @@ final class SituationService
             $ids = array_flip(array_column($inArea, 'id'));
             $inBuffer = array_values(array_filter($run($buffer), fn ($f) => !isset($ids[$f['id']])));
         }
-        return ['definition' => $a['definition'], 'label' => $a['label'], 'bufferM' => $bufferM, 'area' => $a['area'], 'buffer' => $buffer, 'inArea' => $inArea, 'inBuffer' => $inBuffer];
+        $rate = function (array $list) use ($scenario): array {
+            foreach ($list as &$f) {
+                $f['atRisk'] = $scenario === null ? null : ($scenario['areaWide'] || in_array($scenario['id'], $f['hazards'], true));
+            }
+            unset($f);
+            if ($scenario !== null) {
+                // stabil: Gefährdete zuerst, sonst Reihenfolge Nord → Süd beibehalten
+                $risk = array_values(array_filter($list, fn ($f) => $f['atRisk']));
+                $rest = array_values(array_filter($list, fn ($f) => !$f['atRisk']));
+                $list = [...$risk, ...$rest];
+            }
+            return $list;
+        };
+        return ['definition' => $a['definition'], 'label' => $a['label'], 'bufferM' => $bufferM, 'scenario' => $scenario,
+            'area' => $a['area'], 'buffer' => $buffer, 'inArea' => $rate($inArea), 'inBuffer' => $rate($inBuffer)];
+    }
+
+    /** @return ?array{id:int,name:string,areaWide:bool} */
+    private function scenario(mixed $id): ?array
+    {
+        if ($id === null) {
+            return null;
+        }
+        if (!is_int($id)) {
+            throw $this->invalid('scenarioId', 'Ungültiges Szenario.');
+        }
+        $st = $this->db->prepare('SELECT id, name, area_wide FROM scenarios WHERE id = ?');
+        $st->execute([$id]);
+        $r = $st->fetch() ?: throw $this->invalid('scenarioId', 'Unbekanntes Szenario.');
+        return ['id' => (int) $r['id'], 'name' => $r['name'], 'areaWide' => (bool) (int) $r['area_wide']];
     }
 
     /** Prüft, ob sich nicht benachbarte Kanten eines geschlossenen Rings schneiden. */

@@ -175,7 +175,7 @@ export async function renderAdmin(root, { me, tab, navigate }) {
         h('span', { class: 'mk', style: { background: it.color } }, svg(SYMBOLS[it.symbol] || SYMBOLS.box, { size: 15, stroke: 2.2 })),
         h('span', { style: { flex: '1', 'min-width': '0' } },
           h('span', { style: { display: 'block', 'font-weight': '600' } }, it.name),
-          h('span', { class: 'cap' }, `${it.usageCount} Einrichtung${it.usageCount === 1 ? '' : 'en'}${it.active ? '' : ' · inaktiv'}`))),
+          h('span', { class: 'cap' }, `${it.usageCount} Einrichtung${it.usageCount === 1 ? '' : 'en'}${it.areaWide ? ' · flächig' : ''}${it.active ? '' : ' · inaktiv'}`))),
       h('button', { class: 'btn btn-icon', type: 'button', disabled: i === 0, 'aria-label': `${it.name} nach oben`, onClick: () => move(i, -1) }, svg(UI.up, { size: 16, stroke: 2.4 })),
       h('button', { class: 'btn btn-icon', type: 'button', disabled: i === list.length - 1, 'aria-label': `${it.name} nach unten`, onClick: () => move(i, 1) }, svg(UI.down, { size: 16, stroke: 2.4 }))));
     if (d.id === null) {
@@ -207,6 +207,9 @@ export async function renderAdmin(root, { me, tab, navigate }) {
     }, svg(SYMBOLS[k], { size: 20 })));
     const active = h('button', { class: 'sw', type: 'button', role: 'switch', 'aria-checked': String(d.active), 'aria-labelledby': 'ed-act' });
     active.addEventListener('click', () => { d.active = !d.active; active.setAttribute('aria-checked', String(d.active)); });
+    const isScen = tab === 'szenarien';
+    const wide = isScen ? h('button', { class: 'sw', type: 'button', role: 'switch', 'aria-checked': String(Boolean(d.areaWide)), 'aria-labelledby': 'ed-wide', 'aria-describedby': 'ed-wide-h' }) : null;
+    wide?.addEventListener('click', () => { d.areaWide = !d.areaWide; wide.setAttribute('aria-checked', String(d.areaWide)); });
     const inUse = d.id !== null && d.usageCount > 0;
     const del = h('button', { class: 'btn btn-danger', type: 'button', disabled: d.id === null || inUse }, 'Löschen');
     del.addEventListener('click', async () => {
@@ -228,12 +231,15 @@ export async function renderAdmin(root, { me, tab, navigate }) {
       h('div', {}, h('div', { class: 'lbl' }, 'Farbe'), h('div', { class: 'chooser' }, swatches)),
       h('div', {}, h('div', { class: 'lbl' }, 'Symbol'), h('div', { class: 'chooser', style: { gap: '8px' } }, symbols)),
       h('div', { class: 'toggle-row' }, h('span', { id: 'ed-act', class: 'lbl', style: { margin: '0' } }, 'Aktiv (in Filtern und beim Anlegen wählbar)'), active),
+      isScen ? h('div', {},
+        h('div', { class: 'toggle-row' }, h('span', { id: 'ed-wide', class: 'lbl', style: { margin: '0' } }, 'Flächig – betrifft alle Einrichtungen im Gebiet'), wide),
+        h('div', { id: 'ed-wide-h', class: 'cap', style: { 'margin-top': '4px' } }, 'Im Lagemodus gelten bei flächigen Szenarien (z. B. Stromausfall) alle Einrichtungen im Ereignisgebiet als gefährdet. Sonst nur die, die für dieses Szenario als „gefährdet bei“ markiert sind.')) : null,
       err,
       h('div', { style: { display: 'flex', gap: '8px', 'justify-content': 'space-between' } }, del, save),
       h('div', { class: 'cap' }, 'Löschen ist nur möglich, solange keine Einrichtung dieser Auswahl zugeordnet ist.'));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const body = { name: d.name.trim(), color: d.color, symbol: d.symbol, active: d.active };
+      const body = { name: d.name.trim(), color: d.color, symbol: d.symbol, active: d.active, ...(tab === 'szenarien' ? { areaWide: Boolean(d.areaWide) } : {}) };
       try {
         if (d.id === null) {
           await api('POST', cfg.api, body);
@@ -265,7 +271,7 @@ export async function renderAdmin(root, { me, tab, navigate }) {
   }
 
   function blank(cfg) {
-    return { id: null, name: '', color: PALETTE[0][0], symbol: cfg.symbols[0], active: true, usageCount: 0 };
+    return { id: null, name: '', color: PALETTE[0][0], symbol: cfg.symbols[0], active: true, areaWide: false, usageCount: 0 };
   }
 
   try {

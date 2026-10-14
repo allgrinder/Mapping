@@ -111,6 +111,51 @@ final class SituationTest extends TestCase
         $this->assertFalse(SituationService::selfIntersects([[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]));
     }
 
+    public function testScenarioRatesFacilitiesAtRisk(): void
+    {
+        $scen = array_column(self::$db->query('SELECT name, id FROM scenarios')->fetchAll(), 'id', 'name');
+        $flood = (int) $scen['Hochwasser'];
+        $power = (int) $scen['Langanhaltender Stromausfall'];
+        // d ist für Hochwasser markiert, c nicht
+        self::$db->prepare('INSERT INTO facility_hazards (facility_id, scenario_id) VALUES (?, ?)')->execute([$this->ids['d'], $flood]);
+        $def = ['type' => 'boundary', 'level' => 'kreis', 'code' => '05315'];
+        $q = fn ($sid) => $this->call('POST', '/api/situation/query', ['definition' => $def, 'bufferM' => 0, 'scenarioId' => $sid]);
+
+        $r = $q(null)['body'];
+        $this->assertNull($r['scenario']);
+        $this->assertSame([null, null], array_column($r['inArea'], 'atRisk'));
+
+        $r = $q($flood)['body'];
+        $this->assertSame(['id' => $flood, 'name' => 'Hochwasser', 'areaWide' => false], $r['scenario']);
+        $this->assertSame(['Einrichtung d', 'Einrichtung c'], array_column($r['inArea'], 'name'), 'Gefährdete zuerst');
+        $this->assertSame([true, false], array_column($r['inArea'], 'atRisk'));
+
+        $r = $q($power)['body'];
+        $this->assertTrue($r['scenario']['areaWide']);
+        $this->assertSame([true, true], array_column($r['inArea'], 'atRisk'), 'Flächiges Szenario betrifft alle im Gebiet');
+
+        $this->assertSame(422, $q(999999)['status']);
+        $this->assertSame(422, $q('1')['status']);
+
+        // Szenario „flächig“ in den Stammdaten umschalten
+        $this->assertSame(200, $this->call('PUT', "/api/scenarios/$flood", ['name' => 'Hochwasser', 'color' => '#2F6FDE', 'symbol' => 'wave', 'areaWide' => true])['status']);
+        $this->assertSame([true, true], array_column($q($flood)['body']['inArea'], 'atRisk'));
+        $list = array_column($this->call('GET', '/api/scenarios')['body']['items'], 'areaWide', 'name');
+        $this->assertTrue($list['Hochwasser']);
+        $this->assertFalse($list['Starkregen']);
+        $this->assertSame(200, $this->call('PUT', "/api/scenarios/$flood", ['name' => 'Hochwasser', 'color' => '#2F6FDE', 'symbol' => 'wave', 'areaWide' => false])['status']);
+
+        // Ereignis merkt sich Szenario und Bewertung
+        $e = $this->call('POST', '/api/events', ['name' => 'Hochwasser Sieg', 'definition' => $def, 'bufferM' => 0, 'scenarioId' => $flood]);
+        $this->assertSame(201, $e['status'], json_encode($e['body']));
+        $this->assertSame($flood, $e['body']['scenarioId']);
+        $this->assertSame('Hochwasser', $e['body']['snapshot']['scenario']['name']);
+        $this->assertSame([true, false], array_column($e['body']['snapshot']['inArea'], 'atRisk'));
+        $item = $this->call('GET', '/api/events')['body']['items'][0];
+        $this->assertSame('Hochwasser', $item['scenarioName']);
+        $this->assertSame(1, $item['counts']['atRisk']);
+    }
+
     public function testEventsStoreSnapshotAndRoles(): void
     {
         $def = ['type' => 'boundary', 'level' => 'kreis', 'code' => '05111'];
@@ -122,7 +167,7 @@ final class SituationTest extends TestCase
         $this->assertSame($def, $r['body']['definition']);
 
         $list = $this->call('GET', '/api/events')['body']['items'];
-        $this->assertSame(['inArea' => 1, 'inBuffer' => 1], $list[0]['counts']);
+        $this->assertSame(['inArea' => 1, 'inBuffer' => 1, 'atRisk' => null], $list[0]['counts']);
 
         // Lesende Rolle darf öffnen und speichern, aber nicht löschen
         $this->makeUser('lena', 'lesen');
