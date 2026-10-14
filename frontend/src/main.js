@@ -7,15 +7,14 @@ import { h } from './ui/dom.js';
 import { renderLogin } from './views/login.js';
 import { renderPasswordChange } from './views/password.js';
 import { renderAdmin } from './views/admin.js';
-import { renderHome } from './views/home.js';
+import { renderMapPage } from './views/mapPage.js';
+import { applyTheme } from './ui/theme.js';
+import './styles/map.css';
 
 const root = document.getElementById('app');
 let me = null;
+let cleanup = null;
 
-// Farbschema: Systemeinstellung, später manuell umschaltbar (Warnlage nutzt Dunkelmodus).
-const dark = window.matchMedia?.('(prefers-color-scheme: dark)');
-const applyTheme = () => root.classList.replace(dark?.matches ? 'kl-light' : 'kl-dark', dark?.matches ? 'kl-dark' : 'kl-light');
-dark?.addEventListener?.('change', applyTheme);
 applyTheme();
 
 const navigate = (hash) => { if (location.hash === hash) route(); else location.hash = hash; };
@@ -32,6 +31,7 @@ async function refreshSession() {
 }
 
 async function route() {
+  if (cleanup) { cleanup(); cleanup = null; }
   const path = location.hash.replace(/^#/, '') || '/karte';
   const [, section, sub] = path.split('/');
   if (!me && section !== 'login') return navigate('#/login');
@@ -57,7 +57,8 @@ async function route() {
       return renderAdmin(root, { me, tab: sub, navigate });
     case 'karte':
     default:
-      return renderHome(root, { me, onLogout: async () => { me = null; await refreshSession(); navigate('#/login'); } });
+      cleanup = await renderMapPage(root, { me, onLogout: async () => { me = null; await refreshSession(); navigate('#/login'); } });
+      return cleanup;
   }
 }
 

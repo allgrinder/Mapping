@@ -130,3 +130,9 @@ Der Proxy akzeptiert nur Schlüssel aus der Konfiguration, niemals frei übergeb
 5. **Dienst-URLs/Lizenzen**: werden zu Beginn von Arbeitspaket 3 bzw. Stufe 2 recherchiert und mit Quellenangabe in `config/services.php` abgelegt. Falls die Entwicklungsumgebung externe Hosts blockiert, kann ich sie dort nicht live testen; dann markiere ich sie als „ungetestet“.
 6. **Mehrsprachigkeit**: nur Deutsch. **Browser**: aktuelle Chromium/Firefox-Desktop-Versionen.
 7. **Branch**: Entwicklung auf `claude/vigilant-mccarthy-o1vnp1`, kein PR ohne Aufforderung.
+
+## 7. Entscheidungen während der Umsetzung
+
+- **PLZ-Filter:** Das Design zeigt „PLZ von/bis“, die Anforderung nennt einen Präfix („41“). Umgesetzt ist ein Präfixfeld „PLZ-Bereich (Anfang der PLZ)“.
+- **Grenzdaten:** Import aus lokalen Dateien (DVG-Shape-ZIP, PLZ-GeoJSON); DVG-Schlüssel (`KN`) werden auf AGS-Länge der Ebene gekürzt (RB 3, Kreis 5, Gemeinde 8 Stellen). Ohne `dvg2bld` wird die Landesfläche aus den Regierungsbezirken vereinigt.
+- **Kachelraster:** eigenes EPSG:25832-Raster (Ursprung 270000/5850000, 256 px, 12 Stufen) – gemeinsam für Cache, Vorabladen und Druck.

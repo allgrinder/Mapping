@@ -2,7 +2,7 @@
 
 Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUNGSPLAN.md](docs/UMSETZUNGSPLAN.md).
 
-**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Die Karte folgt in Arbeitspaket 3.
+**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Einrichtungen folgen in Arbeitspaket 4.
 
 ## Technik
 PHP ≥ 8.3 (Mindestversion über `PHP_MIN_VERSION` konfigurierbar), Slim 4, MariaDB ≥ 10.11 (PDO), Composer.
@@ -39,6 +39,31 @@ Anwendung: http://localhost:8080 (API unter `/api`).
 4. `php bin/migrate.php && php bin/seed.php`
 5. Webserver-DocumentRoot auf `backend/public`; Anfragen unter `/api/` an `index.php` weiterleiten (Beispiel: `docker/nginx/default.conf`). **Nur HTTPS betreiben** (Session-Cookie ist `Secure`).
 
+## Grenzdaten importieren (einmalig, ohne Internet auf dem Server)
+Bezugsquellen und Lizenzen stehen in `config/services.php` (→ `boundaries`). Dateien auf einem Rechner mit Internet laden und auf den Server kopieren:
+
+1. **Verwaltungsgrenzen** (Geobasis NRW, dl-de/zero-2.0): `dvg2_EPSG25832_Shape.zip` von
+   https://www.opengeodata.nrw.de/produkte/geobasis/vkg/dvg/dvg2/
+   ```
+   php bin/import-boundaries.php --dvg=/pfad/dvg2_EPSG25832_Shape.zip
+   ```
+2. **PLZ-Gebiete** (OpenStreetMap, ODbL): GeoJSON der 5-stelligen PLZ-Gebiete, z. B. von https://www.suche-postleitzahl.org/downloads
+   (Dateiname vor Ort prüfen). Die Datei darf ganz Deutschland enthalten; der Import schneidet auf NRW zu und bildet die 2-stelligen Leitregionen selbst.
+   ```
+   php bin/import-boundaries.php --plz5=/pfad/plz-5stellig.geojson
+   ```
+Feldnamen und Dateimuster sind in `config/boundaries.php` anpassbar. Ein erneuter Import ersetzt die jeweilige Ebene.
+
+## Hintergrundkarten (offline-first)
+`config/basemaps.php`: „Politisch“ wird aus den importierten Grenzen gezeichnet und braucht nie Netz.
+„Topografisch“ nutzt Kacheln aus `backend/storage/tiles/topografisch/`. Ist eine Quelle gesetzt (`TOPO_UPSTREAM=dtk` und
+`DTK_WMS_LAYERS=<Layername aus den GetCapabilities des DTK-WMS>`), lädt der Server fehlende Kacheln über den Proxy nach und speichert sie.
+Für Betrieb ohne Internet die Kacheln vorab erzeugen und das Verzeichnis kopieren:
+```
+php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=6
+```
+Ohne Kacheln und ohne Quelle ist „Topografisch“ in der Oberfläche ausgegraut.
+
 ## Wichtige Umgebungsvariablen
 | Variable | Standard | Bedeutung |
 |---|---|---|
@@ -48,6 +73,8 @@ Anwendung: http://localhost:8080 (API unter `/api`).
 | `LOGIN_MAX_PER_USER` / `LOGIN_MAX_PER_IP` / `LOGIN_WINDOW` | 5 / 30 / 900 | Login-Ratenbegrenzung |
 | `TRUST_PROXY_HEADERS` | false | `X-Forwarded-For` nur hinter vertrauenswürdigem Proxy |
 | `OUTBOUND_PROXY` | leer | ausgehender Proxy für externe Dienste |
+| `TOPO_UPSTREAM` / `DTK_WMS_LAYERS` | dtk / leer | Quelle für topografische Kacheln; ohne Layername kein Netzzugriff |
+| `BASEMAP_DEFAULT` | politisch | Start-Hintergrund |
 
 ## Tests
 Benötigen eine MariaDB mit Datenbank `kritis_test` (Benutzer/Passwort per `DB_USER`/`DB_PASS`, Standard `kritis`/`kritis`):

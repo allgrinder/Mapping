@@ -25,11 +25,6 @@ return [
     'view_extent' => [255000, 5545000, 560000, 5850000],
     'default' => $env('BASEMAP_DEFAULT', 'politisch'),
     'basemaps' => [
-        'politisch' => [
-            'label' => 'Politisch',
-            'type' => 'boundaries',
-            'attribution' => '© Geobasis NRW',
-        ],
         'topografisch' => [
             'label' => 'Topografisch',
             'type' => 'tiles',
@@ -37,6 +32,11 @@ return [
             'attribution' => '© Geobasis NRW, © BKG',
             // null = nur lokale Kacheln (kein Netzzugriff). 'dtk' = WMS aus services.php → wms.dtk
             'upstream' => $env('TOPO_UPSTREAM', 'dtk'),
+        ],
+        'politisch' => [
+            'label' => 'Politisch',
+            'type' => 'boundaries',
+            'attribution' => '© Geobasis NRW',
         ],
     ],
 ];

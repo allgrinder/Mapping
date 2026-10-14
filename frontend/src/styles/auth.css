@@ -16,9 +16,3 @@
 .auth-card .cap { text-align: center; line-height: 1.5; }
 .pw-rules { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-3); line-height: 1.6; }
 .pw-rules li.ok { color: var(--ok); }
-.home-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; z-index: 2; }
-.home-brand { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px 0 8px; border-radius: 16px; }
-.home-logo { width: 36px; height: 36px; border-radius: 10px; box-shadow: none; }
-.home-right { position: relative; }
-.home-user { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px 0 10px; border-radius: 16px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--text); cursor: pointer; }
-.home-menu { position: absolute; right: 0; top: 60px; min-width: 220px; padding: 8px; border-radius: 16px; display: flex; flex-direction: column; gap: 2px; }

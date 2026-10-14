@@ -7,6 +7,7 @@ export default defineConfig({
     emptyOutDir: false,
     assetsDir: 'assets',
     sourcemap: false,
+    chunkSizeWarningLimit: 1500, // OpenLayers wird bewusst gebündelt (keine CDN)
   },
   server: {
     port: 5173,
