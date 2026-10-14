@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>KRITIS-Lagekarte</Name>
+  <Repository>ghcr.io/allgrinder/mapping:latest</Repository>
+  <Registry>https://github.com/allgrinder/Mapping/pkgs/container/mapping</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/allgrinder/Mapping/issues</Support>
+  <Project>https://github.com/allgrinder/Mapping</Project>
+  <Overview>Interaktive Lagekarte krisenrelevanter Einrichtungen in NRW (Karte in EPSG:25832, Filter, Lagemodus mit Krisenszenarien, Druck/PDF, Warnlage, Excel/CSV-Import, Offline-Betrieb).[br][br]
+Benötigt eine MariaDB/MySQL-Datenbank – am einfachsten das Template „KRITIS-MariaDB“ aus demselben Ordner zuerst installieren.[br]
+Beim ersten Start werden Tabellen, Stammdaten und der Benutzer „admin“ angelegt. Das [b]Initialpasswort steht im Container-Log[/b] (Docker → KRITIS-Lagekarte → Logs) und muss bei der ersten Anmeldung geändert werden. Die Verwaltungsgrenzen NRW werden automatisch von Geobasis NRW geladen (dl-de/zero-2.0).</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/templates/kritis-lagekarte.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/icon.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Eine MariaDB 10.11 (oder neuer) bzw. MySQL 8 mit leerer Datenbank – z. B. Template „KRITIS-MariaDB“.</Requires>
+  <Config Name="Web-Port" Target="8080" Default="8085" Mode="tcp" Description="Port der Weboberfläche im Heimnetz (http://Unraid-IP:Port)." Type="Port" Display="always" Required="true" Mask="false">8085</Config>
+  <Config Name="Daten" Target="/app/backend/storage" Default="/mnt/user/appdata/kritis/storage" Mode="rw" Description="Kachelvorrat der topografischen Karte, Caches, Logs und Ordner import/ (DVG-ZIP bzw. PLZ-GeoJSON für Betrieb ohne Internet)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kritis/storage</Config>
+  <Config Name="Datenbank-Host" Target="DB_HOST" Default="" Mode="" Description="IP-Adresse des Unraid-Servers (bei Template KRITIS-MariaDB) oder Containername in einem gemeinsamen eigenen Docker-Netzwerk." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Datenbank-Port" Target="DB_PORT" Default="3307" Mode="" Description="Port der Datenbank (KRITIS-MariaDB: 3307)." Type="Variable" Display="always" Required="true" Mask="false">3307</Config>
+  <Config Name="Datenbank-Name" Target="DB_NAME" Default="kritis" Mode="" Description="" Type="Variable" Display="advanced" Required="true" Mask="false">kritis</Config>
+  <Config Name="Datenbank-Benutzer" Target="DB_USER" Default="kritis" Mode="" Description="" Type="Variable" Display="advanced" Required="true" Mask="false">kritis</Config>
+  <Config Name="Datenbank-Passwort" Target="DB_PASS" Default="" Mode="" Description="Gleiches Passwort wie im Template KRITIS-MariaDB (MARIADB_PASSWORD)." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Admin-Benutzername" Target="ADMIN_USER" Default="admin" Mode="" Description="Name des ersten Administrators (nur beim allerersten Start)." Type="Variable" Display="advanced" Required="false" Mask="false">admin</Config>
+  <Config Name="HTTPS-Cookies" Target="COOKIE_SECURE" Default="false|true" Mode="" Description="true nur hinter einem HTTPS-Reverse-Proxy (SWAG, Nginx Proxy Manager). Bei direktem Aufruf über http://IP:Port: false." Type="Variable" Display="always" Required="true" Mask="false">false</Config>
+  <Config Name="HSTS" Target="HSTS" Default="false|true" Mode="" Description="Nur mit HTTPS auf true setzen." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Proxy-Header vertrauen" Target="TRUST_PROXY_HEADERS" Default="false|true" Mode="" Description="true, wenn ein Reverse-Proxy davor sitzt (für korrekte Client-IP bei der Anmeldesperre)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Grenzen automatisch laden" Target="AUTO_IMPORT_BOUNDARIES" Default="true|false" Mode="" Description="Verwaltungsgrenzen NRW (DVG2) beim ersten Start von Geobasis NRW laden." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Topografische Karte" Target="TOPO_UPSTREAM" Default="dtk|none" Mode="" Description="dtk = fehlende Kacheln beim DTK-WMS von Geobasis NRW nachladen und speichern; none = nur lokaler Kachelvorrat." Type="Variable" Display="advanced" Required="false" Mask="false">dtk</Config>
+  <Config Name="DTK-Layer (optional)" Target="DTK_WMS_LAYERS" Default="" Mode="" Description="Leer = automatisch wählen. Prüfen mit: docker exec -it -u www-data KRITIS-Lagekarte php bin/wms-layers.php dtk" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Ausgehender Proxy (optional)" Target="OUTBOUND_PROXY" Default="" Mode="" Description="z. B. http://proxy:3128 – nur nötig, wenn der Server nicht direkt ins Internet darf." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Zeitzone" Target="TZ" Default="Europe/Berlin" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">Europe/Berlin</Config>
+</Container>

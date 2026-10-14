@@ -1,6 +1,6 @@
 # Baut das Anwendungs-Image (Dockerfile) und legt es in GitHub Packages ab:
 #   ghcr.io/allgrinder/mapping:latest   (und :sha-<commit>)
-# Auf Unraid/Docker-Host: einmalig `docker login ghcr.io` (Token mit read:packages), dann `docker compose pull && docker compose up -d`.
+# Auf Unraid: Templates in deploy/unraid/templates/ oder docker-compose.yml (siehe README).
 name: Docker-Image
 
 on:

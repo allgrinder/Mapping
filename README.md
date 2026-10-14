@@ -38,27 +38,36 @@ Ein fertiges Image enthält Frontend, Backend und Webserver; die Datenbank läuf
 Beim ersten Start richtet sich alles selbst ein: Tabellen, Stammdaten, Admin (Initialpasswort im Container-Log)
 und – bei Internetzugang – die Verwaltungsgrenzen NRW (DVG2 von Geobasis NRW).
 
-Das Image baut GitHub bei jedem Push automatisch (`.github/workflows/docker.yml`) → `ghcr.io/allgrinder/mapping:latest`.
+Das Image baut GitHub bei jedem Push automatisch (`.github/workflows/docker.yml`) → `ghcr.io/allgrinder/mapping:latest` (öffentlich, kein Login nötig).
 
-**Unraid:**
-1. Einmalig auf GitHub ein Token anlegen (Settings → Developer settings → Personal access tokens (classic), Recht `read:packages`).
-2. Unraid-Terminal: `docker login ghcr.io -u allgrinder` und das Token als Passwort eingeben.
-3. Plugin „Docker Compose Manager“ (Community Applications) → *Add New Stack* „kritis“ → Inhalt von
-   `deploy/unraid/docker-compose.yml` einfügen, unter *Edit Env* den Inhalt von `deploy/unraid/env.example` einfügen und die Passwörter ändern.
-4. *Compose Up*. Im Log von `kritis-app` steht das Initialpasswort für `admin`. Aufruf: `http://<unraid-ip>:8085`.
+**Unraid mit Templates (empfohlen):** Zwei Vorlagen in `deploy/unraid/templates/` – App und passende MariaDB.
+1. Unraid-Terminal (oder *Tools → Terminal*), Vorlagen holen:
+   ```
+   cd /boot/config/plugins/dockerMan/templates-user
+   wget -O my-KRITIS-MariaDB.xml   https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/templates/kritis-mariadb.xml
+   wget -O my-KRITIS-Lagekarte.xml https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/templates/kritis-lagekarte.xml
+   ```
+   (Alternativ unter *Docker → Template Repositories* `https://github.com/allgrinder/Mapping` eintragen.)
+2. *Docker → Add Container → Template „KRITIS-MariaDB“*: Datenbank- und Root-Passwort wählen → *Apply*.
+3. *Add Container → Template „KRITIS-Lagekarte“*: Datenbank-Host = IP des Unraid-Servers, Port 3307, dasselbe Datenbank-Passwort → *Apply*.
+4. *Docker → KRITIS-Lagekarte → Logs*: Initialpasswort für `admin`. Aufruf über *WebUI* bzw. `http://<unraid-ip>:8085`.
 
+Aktualisieren: *Docker → Check for Updates* bzw. *Force Update* beim Container KRITIS-Lagekarte.
+
+**Unraid mit Docker Compose Manager (Alternative):** Plugin „Docker Compose Manager“ → *Add New Stack* „kritis“ →
+Inhalt von `deploy/unraid/docker-compose.yml` einfügen, unter *Edit Env* `deploy/unraid/env.example` einfügen, Passwörter ändern → *Compose Up*.
 Aktualisieren: *Compose Pull*, dann *Compose Up*. Daten liegen unter `/mnt/user/appdata/kritis/` (`mysql/`, `storage/` mit
 Kachelvorrat, Caches und `import/`). Ohne Internet: DVG-ZIP bzw. PLZ-GeoJSON nach `storage/import/` legen und den Container neu starten.
 Hinter einem HTTPS-Reverse-Proxy (SWAG, Nginx Proxy Manager) `COOKIE_SECURE=true` und `TRUST_PROXY_HEADERS=true` setzen.
 
-Hilfsbefehle im Container:
+Hilfsbefehle im Container (bei Compose heißt er `kritis-app`):
 ```
-docker exec -it -u www-data kritis-app php bin/reset-password.php admin     # Passwort vergessen → neues Einmalpasswort
-docker exec -it -u www-data kritis-app php bin/wms-layers.php dtk          # Layerwahl der topografischen Karte prüfen
-docker exec -it -u www-data kritis-app php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=7   # Kachelvorrat anlegen
+docker exec -it -u www-data KRITIS-Lagekarte php bin/reset-password.php admin     # Passwort vergessen → neues Einmalpasswort
+docker exec -it -u www-data KRITIS-Lagekarte php bin/wms-layers.php dtk          # Layerwahl der topografischen Karte prüfen
+docker exec -it -u www-data KRITIS-Lagekarte php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=7   # Kachelvorrat anlegen
 ```
-Ohne GitHub-Login: auf einem Rechner mit Docker `docker build -t kritis-lagekarte .` im Projektordner, dann
-`docker save kritis-lagekarte | ssh root@unraid docker load` und in der `.env` `KRITIS_IMAGE=kritis-lagekarte` setzen.
+Selbst bauen statt Download: `docker build -t kritis-lagekarte .` im Projektordner, dann im Template bzw. in der `.env`
+(`KRITIS_IMAGE`) `kritis-lagekarte` als Image eintragen.
 
 ## Entwicklung mit Docker
 ```

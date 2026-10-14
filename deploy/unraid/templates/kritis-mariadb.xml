@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>KRITIS-MariaDB</Name>
+  <Repository>mariadb:10.11</Repository>
+  <Registry>https://hub.docker.com/_/mariadb</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/allgrinder/Mapping/issues</Support>
+  <Project>https://mariadb.org</Project>
+  <Overview>Datenbank für die KRITIS-Lagekarte (offizielles MariaDB-Image 10.11 LTS). Legt beim ersten Start die Datenbank „kritis“ und den Benutzer „kritis“ an.[br][br]
+Zuerst dieses Template installieren, dann „KRITIS-Lagekarte“ mit Datenbank-Host = IP des Unraid-Servers, Port 3307 und demselben Datenbank-Passwort.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/templates/kritis-mariadb.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/allgrinder/Mapping/HEAD/deploy/unraid/icon.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Datenbank-Port" Target="3306" Default="3307" Mode="tcp" Description="Port im Heimnetz (3307, damit eine vorhandene MariaDB auf 3306 nicht stört)." Type="Port" Display="always" Required="true" Mask="false">3307</Config>
+  <Config Name="Daten" Target="/var/lib/mysql" Default="/mnt/user/appdata/kritis/mysql" Mode="rw" Description="Datenbankdateien. Für bessere Leistung gern auf den Cache-Pool legen (z. B. /mnt/cache/appdata/kritis/mysql)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kritis/mysql</Config>
+  <Config Name="Datenbank-Name" Target="MARIADB_DATABASE" Default="kritis" Mode="" Description="" Type="Variable" Display="advanced" Required="true" Mask="false">kritis</Config>
+  <Config Name="Datenbank-Benutzer" Target="MARIADB_USER" Default="kritis" Mode="" Description="" Type="Variable" Display="advanced" Required="true" Mask="false">kritis</Config>
+  <Config Name="Datenbank-Passwort" Target="MARIADB_PASSWORD" Default="" Mode="" Description="Frei wählen – dasselbe Passwort im Template KRITIS-Lagekarte eintragen." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Root-Passwort" Target="MARIADB_ROOT_PASSWORD" Default="" Mode="" Description="Frei wählen (Administratorzugang zur Datenbank)." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Zeitzone" Target="TZ" Default="Europe/Berlin" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false">Europe/Berlin</Config>
+</Container>
