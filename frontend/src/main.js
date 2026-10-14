@@ -18,6 +18,7 @@ let cleanup = null;
 applyTheme();
 
 if (DEMO) {
+  document.title = 'KRITIS-Lagekarte NRW (Demo)';
   const reset = h('button', { class: 'btn btn-plain btn-sm', type: 'button' }, 'Zurücksetzen');
   reset.addEventListener('click', async () => {
     const { resetDemo } = await import('./demo/server.js');
