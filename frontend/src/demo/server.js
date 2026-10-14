@@ -2,6 +2,8 @@
 // Daten liegen nur im localStorage dieses Browsers. Keine echte Sicherheit – nur zum Ausprobieren.
 import { ApiError } from '../api.js';
 import { RULES } from '../views/password.js';
+import { findContaining } from './geo.js';
+import { SAMPLES } from './samples.js';
 
 const KEY = 'kl-demo-v1';
 const SYMBOLS = ['cap', 'cross', 'flask', 'box', 'building', 'shield', 'wave', 'rain', 'fire', 'wind', 'power', 'hazard'];
@@ -20,12 +22,13 @@ function seed() {
     ],
     categories: md(cat),
     scenarios: md(scen),
+    facilities: [],
   };
 }
 
 let db = load();
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.users) return s; } catch { /* neu anlegen */ }
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.users) { s.facilities ??= []; return s; } } catch { /* neu anlegen */ }
   return seed();
 }
 function save() {
@@ -76,7 +79,8 @@ function masterData(kind, method, rest, body, actor) {
   const dup = (name, id) => list.some((x) => x.name === name && x.id !== id) && fail(409, 'conflict', 'Der Name ist bereits vergeben.', { name: 'Der Name ist bereits vergeben.' });
   if (method === 'GET' && !rest) {
     requireUser();
-    return { items: [...list].sort((a, b) => a.sortOrder - b.sortOrder).map((x) => ({ ...x, usageCount: 0 })) };
+    const usage = (x) => db.facilities.filter((f) => (kind === 'categories' ? f.categoryId === x.id : f.hazards.includes(x.id))).length;
+    return { items: [...list].sort((a, b) => a.sortOrder - b.sortOrder).map((x) => ({ ...x, usageCount: usage(x) })) };
   }
   requireUser('admin');
   if (method === 'POST' && !rest) {
@@ -100,6 +104,7 @@ function masterData(kind, method, rest, body, actor) {
     return { ok: true };
   }
   if (method === 'DELETE') {
+    if (db.facilities.some((f) => (kind === 'categories' ? f.categoryId === item.id : f.hazards.includes(item.id)))) fail(409, 'in_use', 'Löschen nicht möglich: Es sind noch Einrichtungen zugeordnet.');
     db[kind] = list.filter((x) => x !== item); save();
     return { ok: true };
   }
@@ -145,7 +150,7 @@ function users(method, rest, body) {
 /** Beantwortet eine API-Anfrage wie das echte Backend (gleiche Pfade und Antwortformen). */
 export async function handle(method, path, body) {
   await new Promise((r) => setTimeout(r, 60));
-  const [, section, ...restParts] = path.split('/');
+  const [, section, ...restParts] = path.split('?')[0].split('/');
   const rest = restParts.join('/');
   switch (section) {
     case 'health': return { status: 'ok' };
@@ -187,10 +192,117 @@ export async function handle(method, path, body) {
         attributions: meta ? [meta.attribution] : [],
       };
     }
+    case 'facilities': return facilities(method, rest, body);
+    case 'geo':
+      requireUser();
+      return resolve(Number(new URLSearchParams(path.split('?')[1]).get('lon')), Number(new URLSearchParams(path.split('?')[1]).get('lat')));
+    case 'geocode': {
+      requireUser('admin');
+      const q = new URLSearchParams(path.split('?')[1]).get('q') || '';
+      return geocode(q);
+    }
     case 'boundaries':
       requireUser();
       return staticJson(`boundaries-${rest}.json`, { type: 'FeatureCollection', features: [] });
     default:
   }
   return fail(404, 'not_found', 'Nicht gefunden.');
+}
+
+// ---------------- Einrichtungen ----------------
+async function resolve(lon, lat) {
+  const pt = [lon, lat];
+  const [rb, kr, gm, land] = await Promise.all(['regbez', 'kreis', 'gemeinde', 'land'].map((l) => staticJson(`boundaries-${l}.json`, null)));
+  const r = findContaining(pt, rb)?.properties;
+  const k = findContaining(pt, kr)?.properties;
+  const g = findContaining(pt, gm)?.properties;
+  const inNrw = Boolean(findContaining(pt, land) || r);
+  return {
+    regbez: r?.code || null, kreis: k?.code || null, gemeinde: g?.code || null, plz5: null, inNrw,
+    names: { regbez: r?.name, kreis: k?.name, gemeinde: g?.name }, boundariesLoaded: Boolean(rb?.features?.length),
+  };
+}
+
+async function geocode(q) {
+  if (q.trim().length < 3) fail(422, 'validation_failed', 'Bitte mindestens 3 Zeichen eingeben.');
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?' + new URLSearchParams({ q, format: 'jsonv2', addressdetails: '1', limit: '6', countrycodes: 'de', viewbox: '5.8,52.6,9.5,50.3', bounded: '1', 'accept-language': 'de' });
+    const res = await fetch(url);
+    const data = await res.json();
+    return { items: data.map((d) => {
+      const a = d.address || {};
+      return { label: d.display_name, street: [a.road || a.pedestrian, a.house_number].filter(Boolean).join(' '), zip: a.postcode || '', city: a.city || a.town || a.village || a.municipality || '', lon: Number(d.lon), lat: Number(d.lat) };
+    }) };
+  } catch {
+    return fail(503, 'geocoder_unavailable', 'Die Adresssuche ist derzeit nicht erreichbar. Bitte den Standort auf der Karte setzen.');
+  }
+}
+
+function presentFacility(f) {
+  const user = (id) => db.users.find((u) => u.id === id)?.username || null;
+  return { ...structuredClone(f), createdBy: user(f.createdById), updatedBy: user(f.updatedById) };
+}
+
+async function validateFacility(b) {
+  const errs = {};
+  if (typeof b?.name !== 'string' || b.name.trim().length < 2) errs.name = 'Länge muss zwischen 2 und 255 Zeichen liegen.';
+  if (!db.categories.some((c) => c.id === b?.categoryId)) errs.categoryId = 'Bitte eine Kategorie wählen.';
+  if (typeof b?.city !== 'string' || b.city.trim().length < 2) errs.city = 'Pflichtfeld (Text erwartet).';
+  if (b?.zip && !/^\d{5}$/.test(b.zip)) errs.zip = 'Ungültiges Format.';
+  if (b?.contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.contactEmail)) errs.contactEmail = 'Keine gültige E-Mail-Adresse.';
+  if (!Array.isArray(b?.hazards) || b.hazards.some((h) => !db.scenarios.some((s) => s.id === h))) errs.hazards = 'Ungültige Szenarien.';
+  const lon = Number(b?.location?.lon), lat = Number(b?.location?.lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) errs.location = 'Bitte den Standort auf der Karte setzen.';
+  if (Object.keys(errs).length) fail(422, 'validation_failed', 'Eingaben ungültig.', errs);
+  const adm = await resolve(lon, lat);
+  if (adm.boundariesLoaded && !adm.inNrw) fail(422, 'validation_failed', 'Eingaben ungültig.', { location: 'Der Standort liegt außerhalb von Nordrhein-Westfalen.' });
+  return {
+    name: b.name.trim(), categoryId: b.categoryId,
+    address: { street: b.street?.trim() || null, zip: b.zip?.trim() || null, city: b.city.trim() },
+    location: { lon, lat }, admin: { regbez: adm.regbez, kreis: adm.kreis, gemeinde: adm.gemeinde, plz5: b.zip || null },
+    hazards: [...new Set(b.hazards)],
+    contact: { person: b.contactPerson || null, function: b.contactFunction || null, phone: b.contactPhone || null, email: b.contactEmail || null },
+    note: b.note || null,
+  };
+}
+
+async function facilities(method, rest, body) {
+  if (method === 'GET' && !rest) {
+    requireUser();
+    const asOf = db.facilities.reduce((m, f) => (f.updatedAt > m ? f.updatedAt : m), '1970-01-01 00:00:00');
+    return { items: [...db.facilities].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(presentFacility), dataAsOf: db.facilitiesChangedAt || asOf, servedAt: now() };
+  }
+  if (method === 'GET') {
+    requireUser();
+    return presentFacility(db.facilities.find((f) => String(f.id) === rest) || fail(404, 'not_found', 'Einrichtung nicht gefunden.'));
+  }
+  const actor = requireUser('admin');
+  if (method === 'POST' && !rest) {
+    const f = { id: ++db.seq, ...(await validateFacility(body)), source: body?.source || 'manual', externalId: body?.externalId || null, createdAt: now(), createdById: actor.id, updatedAt: now(), updatedById: actor.id };
+    db.facilities.push(f); db.facilitiesChangedAt = now(); save();
+    return presentFacility(f);
+  }
+  const f = db.facilities.find((x) => String(x.id) === rest) || fail(404, 'not_found', 'Einrichtung nicht gefunden.');
+  if (method === 'PUT') {
+    Object.assign(f, await validateFacility(body), { updatedAt: now(), updatedById: actor.id });
+    db.facilitiesChangedAt = now(); save();
+    return presentFacility(f);
+  }
+  if (method === 'DELETE') {
+    db.facilities = db.facilities.filter((x) => x !== f); db.facilitiesChangedAt = now(); save();
+    return { ok: true };
+  }
+  return fail(405, 'method_not_allowed', 'Nicht erlaubt.');
+}
+
+/** Legt die fiktiven Beispiel-Einrichtungen an (nur Demo). */
+export async function loadSampleData() {
+  const actor = db.users.find((u) => u.role === 'admin');
+  for (const [name, categoryId, street, zip, city, lon, lat, hazards, person, fn, phone, email] of SAMPLES) {
+    if (db.facilities.some((f) => f.name === name)) continue;
+    const v = await validateFacility({ name, categoryId, street, zip, city, location: { lon, lat }, hazards, contactPerson: person, contactFunction: fn, contactPhone: phone, contactEmail: email });
+    db.facilities.push({ id: ++db.seq, ...v, source: 'manual', externalId: null, createdAt: now(), createdById: actor.id, updatedAt: now(), updatedById: actor.id });
+  }
+  db.facilitiesChangedAt = now();
+  save();
 }

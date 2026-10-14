@@ -8,6 +8,7 @@ import { renderLogin } from './views/login.js';
 import { renderPasswordChange } from './views/password.js';
 import { renderAdmin } from './views/admin.js';
 import { renderMapPage } from './views/mapPage.js';
+import { renderFacilityEdit } from './views/facilityEdit.js';
 import { applyTheme, isDark, onThemeChange } from './ui/theme.js';
 import './styles/map.css';
 
@@ -48,7 +49,8 @@ async function refreshSession() {
 
 async function route() {
   if (cleanup) { cleanup(); cleanup = null; }
-  const path = location.hash.replace(/^#/, '') || '/karte';
+  const [path, query = ''] = (location.hash.replace(/^#/, '') || '/karte').split('?');
+  const params = new URLSearchParams(query);
   const [, section, sub] = path.split('/');
   if (!me && section !== 'login') return navigate('#/login');
   if (me?.mustChangePassword && section !== 'passwort' && section !== 'login') return navigate('#/passwort');
@@ -68,12 +70,16 @@ async function route() {
           if (me.mustChangePassword) { await api('POST', '/auth/logout').catch(() => {}); me = null; await refreshSession(); navigate('#/login'); } else history.back();
         },
       });
+    case 'einrichtung':
+      if (me.role !== 'admin') return navigate('#/karte');
+      cleanup = await renderFacilityEdit(root, { id: sub === 'neu' ? null : Number(sub), navigate });
+      return cleanup;
     case 'admin':
       if (me.role !== 'admin') return navigate('#/karte');
       return renderAdmin(root, { me, tab: sub, navigate });
     case 'karte':
     default:
-      cleanup = await renderMapPage(root, { me, onLogout: async () => { me = null; await refreshSession(); navigate('#/login'); } });
+      cleanup = await renderMapPage(root, { me, navigate, selectId: params.get('sel') ? Number(params.get('sel')) : null, onLogout: async () => { me = null; await refreshSession(); navigate('#/login'); } });
       return cleanup;
   }
 }

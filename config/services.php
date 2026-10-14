@@ -46,7 +46,16 @@ return [
         // Stufe 2: Hochwassergefahrenkarten – URL wird bei Umsetzung recherchiert.
     ],
     'geocoding' => [
-        // Arbeitspaket 4
+        // Anbieter austauschbar; leer lassen (GEOCODER_URL=off), wenn kein Internetzugang besteht – dann Marker per Klick setzen.
+        'provider' => 'nominatim',
+        'url' => $env('GEOCODER_URL', 'https://nominatim.openstreetmap.org/search'),
+        'usage_policy' => 'https://operations.osmfoundation.org/policies/nominatim/',
+        'license' => 'ODbL-1.0',
+        'attribution' => '© OpenStreetMap-Mitwirkende',
+        'min_interval_ms' => (int) $env('GEOCODER_MIN_INTERVAL_MS', 1100), // Nominatim: max. 1 Anfrage/Sekunde
+        'cache_days' => 30,
+        'viewbox' => '5.8,52.6,9.5,50.3', // NRW (lon/lat), Ergebnisse werden darauf begrenzt
+        'verified' => true,
     ],
     'warnings' => [
         // Stufe 2: NINA/MoWaS, DWD

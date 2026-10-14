@@ -24,7 +24,7 @@ export const OVERLAYS = [
   { id: 'plz5', label: 'PLZ-Gebiete (5-stellig)', sub: 'Sichtbar ab Maßstab 1:100.000', on: false, maxResolution: RES_1_100000 },
 ];
 
-export async function createMap(target, cfg, { onScale } = {}) {
+export async function createMap(target, cfg, { onScale, fitPadding } = {}) {
   const projection = utmProjection(cfg.grid.extent);
   const geojson = new GeoJSON({ dataProjection: 'EPSG:4326', featureProjection: UTM });
   const loaded = new Set(cfg.boundaries.map((b) => b.level));
@@ -93,7 +93,7 @@ export async function createMap(target, cfg, { onScale } = {}) {
     const size = map.getSize();
     if (!size) return;
     const leftPad = target.getBoundingClientRect().width > 900 ? 404 : 16;
-    view.fit([280000, 5570000, 540000, 5830000], { padding: [24, 96, 24, leftPad], duration });
+    view.fit([280000, 5570000, 540000, 5830000], { padding: fitPadding || [24, 96, 24, leftPad], duration });
   };
   map.once('change:size', () => fitNrw());
   fitNrw();

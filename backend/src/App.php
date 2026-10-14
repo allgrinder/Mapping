@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Kritis;
 
 use Kritis\Controller\AuthController;
+use Kritis\Controller\FacilityController;
+use Kritis\Controller\GeocodeController;
 use Kritis\Controller\MapController;
+use Kritis\Geo\AdminResolver;
 use Kritis\Controller\MasterDataController;
 use Kritis\Geo\TileService;
 use Kritis\Support\HttpClient;
@@ -50,13 +53,15 @@ final class App
         $http = new HttpClient((string) $config->get('outbound_proxy', ''), (int) $services['http']['timeout'], (string) $services['http']['user_agent']);
         $tiles = new TileService($basemaps, $services, $config->get('storage') . '/tiles', $http);
         $map = new MapController($db, $basemaps, $tiles, $config->get('storage') . '/cache');
+        $facilities = new FacilityController($db, new AdminResolver($db));
+        $geocode = new GeocodeController($services['geocoding'], $http, $config->get('storage') . '/cache');
         $master = ['categories' => new MasterDataController($db, 'categories'), 'scenarios' => new MasterDataController($db, 'scenarios')];
 
         $any = fn () => new RequireAuth($db);
         $admin = fn () => new RequireAuth($db, ['admin']);
         $pwOk = fn () => new RequireAuth($db, [], true);
 
-        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $any, $admin, $pwOk, $db) {
+        $app->group('/api', function (RouteCollectorProxy $g) use ($auth, $users, $master, $map, $facilities, $geocode, $any, $admin, $pwOk, $db) {
             $g->get('/health', function (Request $q, Response $r) use ($db) {
                 $db->query('SELECT 1');
                 return Json::respond($r, ['status' => 'ok']);
@@ -75,6 +80,14 @@ final class App
             $g->get('/map/config', [$map, 'config'])->add($any());
             $g->get('/boundaries/{level}', [$map, 'boundaries'])->add($any());
             $g->get('/tiles/{basemap:[a-z0-9_-]+}/{z}/{x}/{y}.png', [$map, 'tile'])->add($any());
+
+            $g->get('/facilities', [$facilities, 'list'])->add($any());
+            $g->post('/facilities', [$facilities, 'create'])->add($admin());
+            $g->get('/facilities/{id:[0-9]+}', [$facilities, 'get'])->add($any());
+            $g->put('/facilities/{id:[0-9]+}', [$facilities, 'update'])->add($admin());
+            $g->delete('/facilities/{id:[0-9]+}', [$facilities, 'delete'])->add($admin());
+            $g->get('/geo/resolve', [$facilities, 'resolve'])->add($any());
+            $g->get('/geocode', [$geocode, 'search'])->add($admin());
 
             foreach ($master as $path => $ctl) {
                 $g->get("/$path", [$ctl, 'list'])->add($any());

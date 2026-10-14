@@ -60,3 +60,10 @@ Object.assign(UI, {
   right: 'm9 6 6 6-6 6',
   userAdmin: [{ tag: 'circle', cx: 9, cy: 8, r: 3.5 }, 'M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5', 'M17 8.5h5M19.5 6v5'],
 });
+
+Object.assign(UI, {
+  phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  mail: [{ tag: 'rect', x: 3, y: 5, width: 18, height: 14, rx: 2 }, 'm3 7 9 6 9-6'],
+  locate: [{ tag: 'circle', cx: 12, cy: 12, r: 3 }, 'M12 2v3M12 19v3M2 12h3M19 12h3'],
+  trash: ['M4 7h16M10 11v6M14 11v6', 'M6 7l1 13h10l1-13M9 7V4h6v3'],
+});

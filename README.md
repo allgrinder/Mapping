@@ -2,7 +2,7 @@
 
 Interaktive Karte krisenrelevanter Einrichtungen in NRW. Planung: [docs/UMSETZUNGSPLAN.md](docs/UMSETZUNGSPLAN.md).
 
-**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Einrichtungen folgen in Arbeitspaket 4.
+**Stand:** Stufe 1, Arbeitspakete 1–2: Backend-Gerüst, Anmeldung mit Initialpasswort-Wechsel, Sitzungen, CSRF, Rollen; Administration (Benutzer, Kategorien, Krisenszenarien) mit Oberfläche nach UI-Design. Arbeitspaket 3: Grenzimport, Karte (OpenLayers, EPSG:25832) mit Hintergründen, Grenz-/PLZ-Ebenen, Legende und Leerzustand. Arbeitspaket 4: Einrichtungen anlegen/bearbeiten/löschen mit Adresssuche, verschiebbarem Marker, automatischer Gebietszuordnung, kombinierbaren Filtern, Trefferliste, Clustering und Detailansicht.
 
 ## Demo im Browser (GitHub Pages)
 Bei jedem Push baut `.github/workflows/pages.yml` eine **Demo-Version** und veröffentlicht sie auf GitHub Pages.
@@ -83,6 +83,8 @@ Ohne Kacheln und ohne Quelle ist „Topografisch“ in der Oberfläche ausgegrau
 | `OUTBOUND_PROXY` | leer | ausgehender Proxy für externe Dienste |
 | `TOPO_UPSTREAM` / `DTK_WMS_LAYERS` | dtk / leer | Quelle für topografische Kacheln; ohne Layername kein Netzzugriff |
 | `BASEMAP_DEFAULT` | politisch | Start-Hintergrund |
+| `GEOCODER_URL` | Nominatim | Adresssuche; `off` = abgeschaltet (Standort per Klick setzen) |
+| `GEOCODER_MIN_INTERVAL_MS` | 1100 | Mindestabstand zwischen Anfragen (Nutzungsbedingungen Nominatim) |
 
 ## Tests
 Benötigen eine MariaDB mit Datenbank `kritis_test` (Benutzer/Passwort per `DB_USER`/`DB_PASS`, Standard `kritis`/`kritis`):

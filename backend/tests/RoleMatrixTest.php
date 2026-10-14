@@ -29,6 +29,13 @@ final class RoleMatrixTest extends TestCase
         yield 'map config' => ['GET', '/api/map/config', null, 401, 200, 200];
         yield 'boundaries' => ['GET', '/api/boundaries/kreis', null, 401, 200, 200];
         yield 'tiles' => ['GET', '/api/tiles/topografisch/0/0/0.png', null, 401, 404, 404];
+        yield 'facilities list' => ['GET', '/api/facilities', null, 401, 200, 200];
+        yield 'facilities create (ungültig)' => ['POST', '/api/facilities', ['name' => 'x'], 401, 403, 422];
+        yield 'facility get (fehlt)' => ['GET', '/api/facilities/999999', null, 401, 404, 404];
+        yield 'facility update (fehlt)' => ['PUT', '/api/facilities/999999', ['name' => 'x'], 401, 403, 404];
+        yield 'facility delete (fehlt)' => ['DELETE', '/api/facilities/999999', null, 401, 403, 404];
+        yield 'geo resolve' => ['GET', '/api/geo/resolve?lon=7&lat=51', null, 401, 200, 200];
+        yield 'geocode' => ['GET', '/api/geocode?q=ab', null, 401, 403, 422];
         yield 'change password' => ['POST', '/api/auth/change-password', ['currentPassword' => 'x', 'newPassword' => 'y'], 401, 422, 422];
     }
 
