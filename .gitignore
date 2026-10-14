@@ -12,3 +12,4 @@ backend/public/index.html
 frontend/dist-demo/
 frontend/demo-public/demo-data/*.json
 backend/public/sw.js
+backend/storage/import/

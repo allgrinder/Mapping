@@ -1,0 +1,49 @@
+# KRITIS-Lagekarte NRW auf Unraid (Compose Manager) oder jedem Docker-Host.
+#   1. Diese Datei und .env (aus env.example) in einen Ordner legen, z. B. /mnt/user/appdata/kritis/
+#   2. docker compose up -d      (Compose Manager: „Compose Up“)
+#   3. Container-Log von „kritis-app“ öffnen → Initialpasswort für „admin“
+#   4. Browser: http://<unraid-ip>:8085
+name: kritis
+
+services:
+  app:
+    image: ${KRITIS_IMAGE:-ghcr.io/allgrinder/mapping:latest}
+    container_name: kritis-app
+    restart: unless-stopped
+    ports: ["${KRITIS_PORT:-8085}:8080"]
+    environment:
+      DB_HOST: db
+      DB_NAME: kritis
+      DB_USER: kritis
+      DB_PASS: ${DB_PASS:?DB_PASS in .env setzen}
+      # Nur über HTTP im Heimnetz: false. Hinter einem HTTPS-Reverse-Proxy (SWAG, Nginx Proxy Manager): true
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      HSTS: ${COOKIE_SECURE:-false}
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      AUTO_IMPORT_BOUNDARIES: ${AUTO_IMPORT_BOUNDARIES:-true}
+      TOPO_UPSTREAM: ${TOPO_UPSTREAM:-dtk}
+      DTK_WMS_LAYERS: ${DTK_WMS_LAYERS:-}
+      OUTBOUND_PROXY: ${OUTBOUND_PROXY:-}
+      TZ: Europe/Berlin
+    volumes:
+      # Kachelvorrat, Caches, Logs und storage/import (Grenz-/PLZ-Dateien für Betrieb ohne Internet)
+      - ${KRITIS_DATA:-/mnt/user/appdata/kritis}/storage:/app/backend/storage
+    depends_on:
+      db: { condition: service_healthy }
+
+  db:
+    image: mariadb:10.11
+    container_name: kritis-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: kritis
+      MARIADB_USER: kritis
+      MARIADB_PASSWORD: ${DB_PASS:?DB_PASS in .env setzen}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:?DB_ROOT_PASS in .env setzen}
+      TZ: Europe/Berlin
+    volumes:
+      - ${KRITIS_DATA:-/mnt/user/appdata/kritis}/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 30

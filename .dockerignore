@@ -1,0 +1,13 @@
+.git
+.github
+**/node_modules
+backend/vendor
+backend/storage
+backend/public/assets
+backend/public/index.html
+backend/public/sw.js
+frontend/dist-demo
+frontend/demo-public/demo-data/*.json
+.env
+.phpunit.cache
+docs

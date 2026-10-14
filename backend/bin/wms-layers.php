@@ -21,7 +21,7 @@ $services = require "$root/config/services.php";
 $basemaps = require "$root/config/basemaps.php";
 $svc = $services['wms'][$key] ?? null;
 if (!$svc) {
-    fwrite(STDERR, "Unbekannter Dienst „$key“. Vorhanden: " . implode(', ', array_keys($services['wms'])) . "\n");
+    fwrite(STDERR, "Unbekannter Dienst „{$key}“. Vorhanden: " . implode(', ', array_keys($services['wms'])) . "\n");
     exit(1);
 }
 $http = new HttpClient((string) $config->get('outbound_proxy', ''), (int) $services['http']['timeout'], (string) $services['http']['user_agent']);

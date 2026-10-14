@@ -33,6 +33,33 @@ cd backend && php -S 127.0.0.1:8000 -t public bin/dev-router.php   # mit APP_ENV
 cd frontend && npm run dev                                         # http://localhost:5173, /api wird an :8000 weitergeleitet
 ```
 
+## Betrieb mit Docker (z. B. Unraid)
+Ein fertiges Image enthält Frontend, Backend und Webserver; die Datenbank läuft als zweiter Container (MariaDB 10.11).
+Beim ersten Start richtet sich alles selbst ein: Tabellen, Stammdaten, Admin (Initialpasswort im Container-Log)
+und – bei Internetzugang – die Verwaltungsgrenzen NRW (DVG2 von Geobasis NRW).
+
+Das Image baut GitHub bei jedem Push automatisch (`.github/workflows/docker.yml`) → `ghcr.io/allgrinder/mapping:latest`.
+
+**Unraid:**
+1. Einmalig auf GitHub ein Token anlegen (Settings → Developer settings → Personal access tokens (classic), Recht `read:packages`).
+2. Unraid-Terminal: `docker login ghcr.io -u allgrinder` und das Token als Passwort eingeben.
+3. Plugin „Docker Compose Manager“ (Community Applications) → *Add New Stack* „kritis“ → Inhalt von
+   `deploy/unraid/docker-compose.yml` einfügen, unter *Edit Env* den Inhalt von `deploy/unraid/env.example` einfügen und die Passwörter ändern.
+4. *Compose Up*. Im Log von `kritis-app` steht das Initialpasswort für `admin`. Aufruf: `http://<unraid-ip>:8085`.
+
+Aktualisieren: *Compose Pull*, dann *Compose Up*. Daten liegen unter `/mnt/user/appdata/kritis/` (`mysql/`, `storage/` mit
+Kachelvorrat, Caches und `import/`). Ohne Internet: DVG-ZIP bzw. PLZ-GeoJSON nach `storage/import/` legen und den Container neu starten.
+Hinter einem HTTPS-Reverse-Proxy (SWAG, Nginx Proxy Manager) `COOKIE_SECURE=true` und `TRUST_PROXY_HEADERS=true` setzen.
+
+Hilfsbefehle im Container:
+```
+docker exec -it -u www-data kritis-app php bin/reset-password.php admin     # Passwort vergessen → neues Einmalpasswort
+docker exec -it -u www-data kritis-app php bin/wms-layers.php dtk          # Layerwahl der topografischen Karte prüfen
+docker exec -it -u www-data kritis-app php bin/prefetch-tiles.php --basemap=topografisch --max-zoom=7   # Kachelvorrat anlegen
+```
+Ohne GitHub-Login: auf einem Rechner mit Docker `docker build -t kritis-lagekarte .` im Projektordner, dann
+`docker save kritis-lagekarte | ssh root@unraid docker load` und in der `.env` `KRITIS_IMAGE=kritis-lagekarte` setzen.
+
 ## Entwicklung mit Docker
 ```
 docker compose up -d --build

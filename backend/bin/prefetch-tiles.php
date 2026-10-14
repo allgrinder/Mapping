@@ -65,7 +65,7 @@ if (isset($opt['dry-run'])) {
 }
 $svc = $tiles->isTileBasemap($id) ? $tiles->upstream($id) : null;
 if ($svc === null) {
-    fwrite(STDERR, "Hintergrund „$id“: keine Quelle erreichbar bzw. kein Layer ermittelbar (basemaps.php / services.php, `php bin/wms-layers.php dtk`, ggf. DTK_WMS_LAYERS).\n");
+    fwrite(STDERR, "Hintergrund „{$id}“: keine Quelle erreichbar bzw. kein Layer ermittelbar (basemaps.php / services.php, `php bin/wms-layers.php dtk`, ggf. DTK_WMS_LAYERS).\n");
     exit(2);
 }
 echo "Quelle: {$svc['url']} · Layer: {$svc['layers']}" . (!empty($svc['layersDiscovered']) ? ' (automatisch gewählt)' : '') . "\n";

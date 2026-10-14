@@ -28,7 +28,7 @@ final class BoundaryImporter
             $files = $this->findFiles($dir, $cfg['files']);
             foreach (['regbez', 'kreis', 'gemeinde'] as $required) {
                 if (!isset($files[$required])) {
-                    throw new RuntimeException("Im DVG-Paket fehlt die Datei für Ebene „$required“.");
+                    throw new RuntimeException("Im DVG-Paket fehlt die Datei für Ebene „{$required}“.");
                 }
             }
             $result = [];
@@ -234,18 +234,11 @@ final class BoundaryImporter
             throw new RuntimeException("Pfad ist weder Verzeichnis noch ZIP-Datei: $path");
         }
         $tmp = sys_get_temp_dir() . '/kritis-dvg-' . bin2hex(random_bytes(4));
-        $zip = new \ZipArchive();
-        if ($zip->open($path) !== true) {
-            throw new RuntimeException("ZIP nicht lesbar: $path");
-        }
+        $files = \Kritis\Support\ZipReader::read($path, fn (string $n) => (bool) preg_match('/\.(shp|shx|dbf|cpg|prj)$/i', $n) && !str_contains($n, '..'));
         mkdir($tmp, 0700, true);
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            if (preg_match('/\.(shp|shx|dbf|cpg|prj)$/i', $name) && !str_contains($name, '..')) {
-                file_put_contents($tmp . '/' . basename($name), $zip->getFromIndex($i));
-            }
+        foreach ($files as $name => $data) {
+            file_put_contents($tmp . '/' . basename($name), $data);
         }
-        $zip->close();
         return [$tmp, static function () use ($tmp) {
             array_map('unlink', glob("$tmp/*") ?: []);
             @rmdir($tmp);
