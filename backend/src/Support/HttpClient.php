@@ -6,7 +6,8 @@ namespace Kritis\Support;
 /** Ausgehende HTTP-Anfragen (nur zu konfigurierten Diensten) über den optionalen IT.NRW-Proxy. */
 class HttpClient
 {
-    public function __construct(private string $proxy = '', private int $timeout = 10, private string $userAgent = 'KRITIS-Lagekarte-NRW/1.0')
+    /** @param int $maxBytes Obergrenze je Antwort (Schutz vor übergroßen Antworten); große Datenabrufe setzen sie gezielt höher */
+    public function __construct(private string $proxy = '', private int $timeout = 10, private string $userAgent = 'KRITIS-Lagekarte-NRW/1.0', private int $maxBytes = 20_000_000)
     {
     }
 
@@ -24,7 +25,8 @@ class HttpClient
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_USERAGENT => $this->userAgent,
             CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-            CURLOPT_MAXFILESIZE => 20_000_000,
+            CURLOPT_MAXFILESIZE => $this->maxBytes,
+            CURLOPT_ENCODING => '', // gzip/deflate annehmen – spart bei großen Antworten (Overpass) viel Übertragung
         ]);
         if ($this->proxy !== '') {
             curl_setopt($ch, CURLOPT_PROXY, $this->proxy);

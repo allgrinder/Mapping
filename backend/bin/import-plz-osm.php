@@ -36,7 +36,7 @@ $saved = $config->get('storage') . '/import/plz-osm-nrw.geojson';
 
 $fetch = function () use ($svc, $services, $config, $say): array {
     $say('Lade PLZ-Gebiete NRW aus OpenStreetMap (Overpass) … das dauert einige Minuten.');
-    $http = new HttpClient((string) $config->get('outbound_proxy', ''), 1200, (string) $services['http']['user_agent']);
+    $http = new HttpClient((string) $config->get('outbound_proxy', ''), 1200, (string) $services['http']['user_agent'], 1_000_000_000);
     $r = (new OsmPostalCodes($svc, $http))->fetch(fn ($m) => print('[plz] ' . $m . PHP_EOL));
     $n = count($r['geojson']['features']);
     if ($n < 50) {

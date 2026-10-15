@@ -66,7 +66,7 @@ try {
             $services = require "$root/config/services.php";
             $url = $services['boundaries']['dvg2']['url'];
             $say("Lade Verwaltungsgrenzen (DVG2, dl-de/zero-2.0): $url");
-            $http = new HttpClient((string) $config->get('outbound_proxy', ''), 180, (string) $services['http']['user_agent']);
+            $http = new HttpClient((string) $config->get('outbound_proxy', ''), 180, (string) $services['http']['user_agent'], 300_000_000);
             $r = $http->get($url);
             if ($r['status'] !== 200 || !str_starts_with($r['body'], "PK")) {
                 throw new RuntimeException("Download fehlgeschlagen (HTTP {$r['status']}). Datei manuell nach storage/import/ legen.");
