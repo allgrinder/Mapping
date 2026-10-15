@@ -13,27 +13,54 @@ use Kritis\Support\HttpClient;
  */
 final class OsmPostalCodes
 {
-    /** Relationen als ID-Liste, Ways einmal mit Geometrie (gemeinsame Grenzen nicht doppelt übertragen). */
-    public const QUERY = '[out:json][timeout:900][maxsize:2000000000];'
-        . 'area["ISO3166-2"="DE-NW"]["boundary"="administrative"]->.nrw;'
-        . 'relation["boundary"="postal_code"](area.nrw)->.r;'
+    /**
+     * Relationen im NRW-Rechteck (süd, west, nord, ost; mit Rand), Ways einmal mit Geometrie – gemeinsame Grenzen
+     * werden nicht doppelt übertragen. Ein Rechteck ist für den Server deutlich billiger als eine Flächenabfrage;
+     * Gebiete außerhalb NRW entfernt der Import beim Zuschnitt. Ressourcenangaben bewusst knapp: große Anforderungen
+     * lehnt ein ausgelasteter Overpass-Server eher ab (HTTP 429/504).
+     */
+    public const QUERY = '[out:json][timeout:300][maxsize:536870912];'
+        . 'relation["boundary"="postal_code"](50.30,5.85,52.55,9.47)->.r;'
         . '.r out body;way(r.r);out geom;';
 
-    public function __construct(private array $svc, private ?HttpClient $http)
+    /** Wartezeiten (Sekunden) vor Wiederholungen bei Überlast – Overpass-Nutzungsregeln empfehlen ≥ 30 s. */
+    public const RETRY_WAITS = [30, 60, 120];
+
+    /** @param ?\Closure $sleep für Tests (statt sleep()) */
+    public function __construct(private array $svc, private ?HttpClient $http, private ?\Closure $sleep = null)
     {
     }
 
     /** @return array{geojson:array, osmBase:?string} */
-    public function fetch(): array
+    public function fetch(?callable $log = null): array
     {
-        if (!$this->http || empty($this->svc['overpass_url'])) {
+        $urls = array_values(array_filter(array_map('trim', explode(',', (string) ($this->svc['overpass_url'] ?? '')))));
+        if (!$this->http || !$urls) {
             throw new \RuntimeException('Kein Overpass-Dienst konfiguriert.');
         }
-        $r = $this->http->get($this->svc['overpass_url'] . '?data=' . rawurlencode(self::QUERY));
-        if ($r['status'] !== 200) {
-            throw new \RuntimeException("Overpass: HTTP {$r['status']}" . ($r['status'] === 429 ? ' (zu viele Anfragen – später erneut)' : ''));
+        $errors = [];
+        foreach ($urls as $url) {
+            foreach ([0, ...self::RETRY_WAITS] as $attempt => $wait) {
+                if ($wait) {
+                    $log && $log("Overpass ausgelastet – neuer Versuch in {$wait} s …");
+                    ($this->sleep ?? 'sleep')($wait);
+                }
+                try {
+                    $r = $this->http->get($url . '?data=' . rawurlencode(self::QUERY));
+                } catch (\Throwable $e) {
+                    $errors[] = parse_url($url, PHP_URL_HOST) . ': ' . $e->getMessage();
+                    continue;
+                }
+                if ($r['status'] === 200) {
+                    return self::fromOverpassJson($r['body']);
+                }
+                $errors[] = parse_url($url, PHP_URL_HOST) . ": HTTP {$r['status']}";
+                if (!in_array($r['status'], [429, 502, 503, 504], true)) {
+                    break; // kein Überlastfehler – nächster Server
+                }
+            }
         }
-        return self::fromOverpassJson($r['body']);
+        throw new \RuntimeException('Overpass nicht verfügbar (' . implode('; ', array_slice($errors, -3)) . ')');
     }
 
     /** @return array{geojson:array, osmBase:?string} */

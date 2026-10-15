@@ -37,7 +37,7 @@ $saved = $config->get('storage') . '/import/plz-osm-nrw.geojson';
 $fetch = function () use ($svc, $services, $config, $say): array {
     $say('Lade PLZ-Gebiete NRW aus OpenStreetMap (Overpass) … das dauert einige Minuten.');
     $http = new HttpClient((string) $config->get('outbound_proxy', ''), 1200, (string) $services['http']['user_agent']);
-    $r = (new OsmPostalCodes($svc, $http))->fetch();
+    $r = (new OsmPostalCodes($svc, $http))->fetch(fn ($m) => print('[plz] ' . $m . PHP_EOL));
     $n = count($r['geojson']['features']);
     if ($n < 50) {
         throw new RuntimeException("Unplausibel wenige PLZ-Gebiete ($n) – Abbruch, vorhandener Stand bleibt.");
@@ -54,9 +54,30 @@ $write = function (string $file, array $r): void {
 
 try {
     if (isset($opt['demo-out'])) {
-        $r = $fetch();
+        $r = isset($opt['from']) ? OsmPostalCodes::fromOverpassJson((string) file_get_contents((string) $opt['from'])) : $fetch();
         $features = [];
+        // Zuschnitt auf NRW ohne Datenbank: Gebiet behalten, wenn ein Teil seiner Stützpunkte in der Landesfläche liegt
+        $landFile = rtrim((string) $opt['demo-out'], '/') . '/boundaries-land.json';
+        $land = is_file($landFile) ? (json_decode((string) file_get_contents($landFile), true)['features'][0]['geometry'] ?? null) : null;
+        $inNrw = function (array $geom) use ($land): bool {
+            if (!$land) {
+                return true;
+            }
+            $rings = $geom['type'] === 'Polygon' ? [$geom['coordinates'][0]] : array_map(fn ($p) => $p[0], $geom['coordinates']);
+            foreach ($rings as $ring) {
+                $step = max(1, intdiv(count($ring), 25));
+                for ($i = 0; $i < count($ring); $i += $step) {
+                    if (\Kritis\Geo\GeoUtil::contains($land, (float) $ring[$i][0], (float) $ring[$i][1])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
         foreach ($r['geojson']['features'] as $f) {
+            if (!$inNrw($f['geometry'])) {
+                continue;
+            }
             $g = Utm32::geometryToWgs84(Simplify::geometry(Utm32::geometryToUtm($f['geometry']), 15));
             if (!$g['coordinates']) {
                 continue;

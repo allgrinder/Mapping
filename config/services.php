@@ -25,7 +25,7 @@ return [
             // PLZ-Gebiete aus OpenStreetMap (boundary=postal_code) – nicht amtlich. Abruf über die Overpass API
             // (Nutzungsregeln: https://dev.overpass-api.de/overpass-doc/en/preface/commons.html – ein Abruf je Monat ist unkritisch).
             'label' => 'PLZ-Gebiete (5-stellig) aus OpenStreetMap',
-            'overpass_url' => $env('OSM_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
+            'overpass_url' => $env('OSM_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'), // mehrere durch Komma = Ausweichserver (z. B. eigener Overpass-Server)
             'refresh_days' => (int) $env('PLZ_REFRESH_DAYS', 30),
             'license' => 'ODbL-1.0',
             'attribution' => '© OpenStreetMap-Mitwirkende (ODbL)',

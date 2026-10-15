@@ -68,6 +68,38 @@ final class OsmPostalCodesTest extends TestCase
         $this->assertSame('40211', $in(6.78, 51.22));
     }
 
+    public function testRetriesOnOverloadAndFallsBackToNextServer(): void
+    {
+        $http = new class ($this->overpass()) extends \Kritis\Support\HttpClient {
+            public array $calls = [];
+            public function __construct(private string $ok) { parent::__construct(); }
+            public function get(string $url): array
+            {
+                $this->calls[] = parse_url($url, PHP_URL_HOST);
+                // Server a: zweimal überlastet, dann ok
+                if (str_contains($url, 'a.example') && count($this->calls) <= 2) {
+                    return ['status' => 504, 'body' => '', 'contentType' => 'text/html'];
+                }
+                if (str_contains($url, 'b.example')) {
+                    return ['status' => 200, 'body' => $this->ok, 'contentType' => 'application/json'];
+                }
+                return str_contains($url, 'a.example') ? ['status' => 200, 'body' => $this->ok, 'contentType' => 'application/json'] : ['status' => 404, 'body' => '', 'contentType' => 'text/plain'];
+            }
+        };
+        $waits = [];
+        $svc = new OsmPostalCodes(['overpass_url' => 'https://a.example/api/interpreter'], $http, function ($s) use (&$waits) { $waits[] = $s; });
+        $this->assertCount(2, $svc->fetch()['geojson']['features']);
+        $this->assertSame([30, 60], $waits, 'Wartezeiten nach Overpass-Regeln');
+
+        // 404 beim ersten Server → sofort der nächste aus der Liste, ohne Warten
+        $http->calls = [];
+        $waits = [];
+        $svc = new OsmPostalCodes(['overpass_url' => 'https://c.example/api/interpreter, https://b.example/api/interpreter'], $http, function ($s) use (&$waits) { $waits[] = $s; });
+        $this->assertCount(2, $svc->fetch()['geojson']['features']);
+        $this->assertSame(['c.example', 'b.example'], $http->calls);
+        $this->assertSame([], $waits);
+    }
+
     public function testRejectsUnexpectedResponses(): void
     {
         $this->expectExceptionMessage('unerwartete Antwort');
