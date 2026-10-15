@@ -22,7 +22,7 @@ return [
         'code_fields' => ['plz', 'PLZ', 'postcode', 'postal_code'],
         'name_fields' => ['note', 'name', 'ort'],
         'simplify_m' => 15,     // OSM-Polygone sind sehr detailliert
-        'source' => 'OpenStreetMap (PLZ-Gebiete, z. B. über suche-postleitzahl.org)',
+        'source' => 'PLZ-Gebiete aus Datei (storage/import)', // OSM-Abruf setzt „OpenStreetMap (boundary=postal_code, Stand …)“
         'license' => 'ODbL-1.0',
         'attribution' => '© OpenStreetMap-Mitwirkende (ODbL)',
     ],

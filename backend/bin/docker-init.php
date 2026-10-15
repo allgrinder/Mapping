@@ -78,9 +78,13 @@ try {
             $say('Keine Verwaltungsgrenzen vorhanden (AUTO_IMPORT_BOUNDARIES=false, nichts in storage/import/).');
         }
     }
-    if (!$has('plz5') && ($plz = glob("$importDir/*plz*5*.geojson") ?: glob("$importDir/*plz*.geojson"))) {
+    // PLZ-Gebiete aus einer abgelegten Datei (amtlich oder eigener OSM-Vorrat). Der OSM-Abruf selbst läuft danach im
+    // Hintergrund (bin/import-plz-osm.php --auto), damit der Start nicht minutenlang wartet.
+    if ($has('land') && !$has('plz5') && ($plz = glob("$importDir/*plz*5*.geojson") ?: glob("$importDir/*plz*.geojson"))) {
         $say('PLZ-Gebiete aus ' . basename($plz[0]) . ' …');
-        $importer->importPlz($plz[0]);
+        $osm = basename($plz[0]) === 'plz-osm-nrw.geojson';
+        $base = $osm ? (json_decode((string) file_get_contents($plz[0]), true)['osmBase'] ?? null) : null;
+        $importer->importPlz($plz[0], null, $osm ? 'OpenStreetMap (boundary=postal_code' . ($base ? ', Stand ' . substr($base, 0, 10) : '') . ')' : null);
     }
 } catch (Throwable $e) {
     // Die App läuft auch ohne Grenzen (Karte ohne politische Ebene); Fehler nur melden

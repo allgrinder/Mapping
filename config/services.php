@@ -22,13 +22,15 @@ return [
             'note' => 'Aktualisierung jährlich zum 1. Oktober. Alternativ DVG1 (hohe Stützpunktdichte) unter …/dvg/dvg1/dvg1_EPSG25832_Shape.zip.',
         ],
         'plz' => [
+            // PLZ-Gebiete aus OpenStreetMap (boundary=postal_code) – nicht amtlich. Abruf über die Overpass API
+            // (Nutzungsregeln: https://dev.overpass-api.de/overpass-doc/en/preface/commons.html – ein Abruf je Monat ist unkritisch).
             'label' => 'PLZ-Gebiete (5-stellig) aus OpenStreetMap',
-            'url' => null,
-            'product_page' => 'https://www.suche-postleitzahl.org/downloads',
+            'overpass_url' => $env('OSM_OVERPASS_URL', 'https://overpass-api.de/api/interpreter'),
+            'refresh_days' => (int) $env('PLZ_REFRESH_DAYS', 30),
             'license' => 'ODbL-1.0',
             'attribution' => '© OpenStreetMap-Mitwirkende (ODbL)',
-            'verified' => false,
-            'note' => 'Dateiname der GeoJSON-Datei „plz-5stellig“ auf der Download-Seite prüfen. ODbL: Namensnennung auf Karte und Ausdruck; abgeleitete Datenbank bleibt ODbL.',
+            'verified' => false, // Endpunkt ist der Standard-Overpass-Server; aus der Entwicklungsumgebung nicht erreichbar, im CI geprüft
+            'note' => 'ODbL: Namensnennung auf Karte und Ausdruck; abgeleitete Datenbank bleibt ODbL. Amtliche Alternative: BKG/Deutsche Post Direkt (lizenzpflichtig).',
         ],
     ],
     'wms' => [

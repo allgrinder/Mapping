@@ -68,9 +68,13 @@ final class BoundaryImporter
     }
 
     /** @return array<string,int> */
-    public function importPlz(string $plz5File, ?string $plz2File = null): array
+    /** @param ?string $source Herkunftsangabe (z. B. mit Datenstand); sonst aus config/boundaries.php */
+    public function importPlz(string $plz5File, ?string $plz2File = null, ?string $source = null): array
     {
         $cfg = $this->config['plz'];
+        if ($source !== null) {
+            $cfg['source'] = $source;
+        }
         if (!$this->db->query("SELECT 1 FROM boundaries WHERE level = 'land' LIMIT 1")->fetchColumn()) {
             throw new RuntimeException('Bitte zuerst die Verwaltungsgrenzen (DVG) importieren – sie werden zum Zuschnitt auf NRW benötigt.');
         }

@@ -51,8 +51,14 @@ function post(msg) {
 /** Lädt den aktuellen Datenstand und die NRW-Übersicht (niedrige Zoomstufen) in den Offline-Cache. */
 export function warmup(cfg, { demo = false, maxZoom = 4 } = {}) {
   const urls = demo
-    ? ['land', 'regbez', 'kreis', 'gemeinde'].map((l) => new URL(`./demo-data/boundaries-${l}.json`, location.href).href).concat(new URL('./demo-data/meta.json', location.href).href)
+    ? ['land', 'regbez', 'kreis'].map((l) => new URL(`./demo-data/boundaries-${l}.json`, location.href).href).concat(new URL('./demo-data/meta.json', location.href).href)
     : ['/api/auth/me', '/api/facilities', '/api/categories', '/api/scenarios', '/api/map/config', '/api/events', '/api/boundaries/land', '/api/boundaries/regbez', '/api/boundaries/kreis'];
+  // Gemeinden und PLZ-Gebiete (falls importiert) ebenfalls vorhalten – Ebenen, Filter und Lagemodus funktionieren dann offline
+  const loaded = new Set((cfg?.boundaries || []).map((b) => b.level));
+  for (const l of ['gemeinde', 'plz5', 'plz2']) {
+    if (!loaded.has(l)) continue;
+    urls.push(demo ? new URL(`./demo-data/boundaries-${l}.json`, location.href).href : `/api/boundaries/${l}`);
+  }
   const topo = cfg?.basemaps?.find((b) => b.id === 'topografisch' && b.available);
   if (topo && !demo) {
     const g = cfg.grid;

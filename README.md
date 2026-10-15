@@ -95,12 +95,26 @@ Bezugsquellen und Lizenzen stehen in `config/services.php` (→ `boundaries`). D
    ```
    php bin/import-boundaries.php --dvg=/pfad/dvg2_EPSG25832_Shape.zip
    ```
-2. **PLZ-Gebiete** (OpenStreetMap, ODbL): GeoJSON der 5-stelligen PLZ-Gebiete, z. B. von https://www.suche-postleitzahl.org/downloads
-   (Dateiname vor Ort prüfen). Die Datei darf ganz Deutschland enthalten; der Import schneidet auf NRW zu und bildet die 2-stelligen Leitregionen selbst.
-   ```
-   php bin/import-boundaries.php --plz5=/pfad/plz-5stellig.geojson
-   ```
+2. **PLZ-Gebiete:** automatisch aus OpenStreetMap, siehe Abschnitt „PLZ-Gebiete“. Eine eigene GeoJSON-Datei (z. B. amtlich)
+   geht weiterhin: `php bin/import-boundaries.php --plz5=/pfad/plz-5stellig.geojson` (Zuschnitt auf NRW und Leitregionen automatisch).
 Feldnamen und Dateimuster sind in `config/boundaries.php` anpassbar. Ein erneuter Import ersetzt die jeweilige Ebene.
+
+## PLZ-Gebiete (OpenStreetMap, offline-first)
+Amtliche PLZ-Flächen gibt es nur lizenzpflichtig (BKG/Deutsche Post Direkt, frei nur für Bundesbehörden). Die App nutzt daher
+die PLZ-Grenzen aus **OpenStreetMap** (`boundary=postal_code`, Lizenz ODbL, © OpenStreetMap-Mitwirkende, **nicht amtlich**),
+abgerufen über die Overpass API – nach demselben Prinzip wie die topografische Karte:
+1. **Vorrat:** Die Gebiete liegen in der Datenbank und zusätzlich als Datei `storage/import/plz-osm-nrw.geojson`.
+   Karte, PLZ-Zuordnung und Lagemodus brauchen danach kein Netz; der Browser hält sie zusätzlich offline vor.
+2. **Automatisch aktualisieren:** Im Container prüft ein Hintergrundjob täglich und lädt nach `PLZ_REFRESH_DAYS` (30) neu.
+   Fällt der Abruf aus, bleibt der Vorrat unverändert. Manuell importierte (z. B. amtliche) PLZ-Daten werden nie überschrieben.
+3. **Ohne Internet:** auf einem Rechner mit Netz `php bin/import-plz-osm.php --out=plz-osm-nrw.geojson` ausführen, die Datei nach
+   `storage/import/` des Servers kopieren und den Container neu starten (bzw. `php bin/import-plz-osm.php --from=…`).
+```
+php bin/import-plz-osm.php            # jetzt laden und importieren
+php bin/import-plz-osm.php --auto     # nur wenn fehlend/veraltet (für Cron ohne Docker)
+```
+Amtliche Daten lassen sich später jederzeit über `php bin/import-boundaries.php --plz5=DATEI.geojson` einspielen; dann in
+`config/boundaries.php` → `plz` Quelle und Namensnennung anpassen.
 
 ## Hintergrundkarten (offline-first, krisenfest)
 `config/basemaps.php`: „Politisch“ wird aus den importierten Grenzen gezeichnet und braucht nie Netz.
@@ -161,6 +175,7 @@ werden aus den GetCapabilities ermittelt (HQhäufig/HQ100/HQextrem); bei Bedarf 
 | `LOGIN_MAX_PER_USER` / `LOGIN_MAX_PER_IP` / `LOGIN_WINDOW` | 5 / 30 / 900 | Login-Ratenbegrenzung |
 | `TRUST_PROXY_HEADERS` | false | `X-Forwarded-For` nur hinter vertrauenswürdigem Proxy |
 | `OUTBOUND_PROXY` | leer | ausgehender Proxy für externe Dienste |
+| `AUTO_IMPORT_PLZ` / `PLZ_REFRESH_DAYS` / `OSM_OVERPASS_URL` | true / 30 / overpass-api.de | PLZ-Gebiete aus OpenStreetMap laden und erneuern |
 | `TOPO_UPSTREAM` / `DTK_WMS_LAYERS` | dtk / leer | Quelle für topografische Kacheln; Layer leer = automatisch aus den GetCapabilities, `TOPO_UPSTREAM=none` = nur lokaler Vorrat, nie Netz |
 | `BASEMAP_DEFAULT` | politisch | Start-Hintergrund |
 | `GEOCODER_URL` | Nominatim | Adresssuche; `off` = abgeschaltet (Standort per Klick setzen) |

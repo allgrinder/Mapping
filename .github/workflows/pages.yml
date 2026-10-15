@@ -41,6 +41,14 @@ jobs:
             echo "::warning::DVG-Download fehlgeschlagen – Demo wird ohne Grenzdaten gebaut."
           fi
 
+      - name: PLZ-Gebiete NRW aus OpenStreetMap (Overpass, ODbL)
+        run: |
+          if php backend/bin/import-plz-osm.php --demo-out=frontend/demo-public/demo-data; then
+            php -r '$m = json_decode(file_get_contents("frontend/demo-public/demo-data/meta.json"), true); echo "PLZ5: ", $m["levels"]["plz5"] ?? 0, " Gebiete, OSM-Stand ", $m["plz"]["osmBase"] ?? "-", PHP_EOL;'
+          else
+            echo "::warning::PLZ-Abruf (Overpass) fehlgeschlagen – Demo wird ohne PLZ-Gebiete gebaut."
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22

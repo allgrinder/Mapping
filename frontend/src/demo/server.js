@@ -203,8 +203,10 @@ export async function handle(method, path, body) {
           { id: 'topografisch', label: 'Topografisch', type: 'tiles', available: false, attribution: '© Geobasis NRW' },
           { id: 'politisch', label: 'Politisch', type: 'boundaries', available: Boolean(levels.regbez), attribution: '© Geobasis NRW' },
         ],
-        boundaries: Object.entries(levels).map(([level, count]) => ({ level, count, source: meta.source, license: meta.license, attribution: meta.attribution, importedAt: meta.generatedAt })),
-        attributions: meta ? [meta.attribution] : [],
+        boundaries: Object.entries(levels).map(([level, count]) => (level.startsWith('plz') && meta.plz
+          ? { level, count, source: meta.plz.source, license: meta.plz.license, attribution: meta.plz.attribution, importedAt: meta.plz.osmBase }
+          : { level, count, source: meta.source, license: meta.license, attribution: meta.attribution, importedAt: meta.generatedAt })),
+        attributions: meta ? [meta.attribution, ...(meta.plz ? [meta.plz.attribution] : [])] : [],
         overlays: { flood: false, warnings: true },
         warningsIntervalS: 300,
       };
@@ -237,13 +239,13 @@ export async function handle(method, path, body) {
 // ---------------- Einrichtungen ----------------
 async function resolve(lon, lat) {
   const pt = [lon, lat];
-  const [rb, kr, gm, land] = await Promise.all(['regbez', 'kreis', 'gemeinde', 'land'].map((l) => staticJson(`boundaries-${l}.json`, null)));
+  const [rb, kr, gm, land, plz] = await Promise.all(['regbez', 'kreis', 'gemeinde', 'land', 'plz5'].map((l) => staticJson(`boundaries-${l}.json`, null)));
   const r = findContaining(pt, rb)?.properties;
   const k = findContaining(pt, kr)?.properties;
   const g = findContaining(pt, gm)?.properties;
   const inNrw = Boolean(findContaining(pt, land) || r);
   return {
-    regbez: r?.code || null, kreis: k?.code || null, gemeinde: g?.code || null, plz5: null, inNrw,
+    regbez: r?.code || null, kreis: k?.code || null, gemeinde: g?.code || null, plz5: findContaining(pt, plz)?.properties?.code || null, inNrw,
     names: { regbez: r?.name, kreis: k?.name, gemeinde: g?.name }, boundariesLoaded: Boolean(rb?.features?.length),
   };
 }
@@ -284,7 +286,7 @@ async function validateFacility(b) {
   return {
     name: b.name.trim(), categoryId: b.categoryId,
     address: { street: b.street?.trim() || null, zip: b.zip?.trim() || null, city: b.city.trim() },
-    location: { lon, lat }, admin: { regbez: adm.regbez, kreis: adm.kreis, gemeinde: adm.gemeinde, plz5: b.zip || null },
+    location: { lon, lat }, admin: { regbez: adm.regbez, kreis: adm.kreis, gemeinde: adm.gemeinde, plz5: adm.plz5 || b.zip || null },
     hazards: [...new Set(b.hazards)],
     contact: { person: b.contactPerson || null, function: b.contactFunction || null, phone: b.contactPhone || null, email: b.contactEmail || null },
     note: b.note || null,
